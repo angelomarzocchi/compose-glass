@@ -6,7 +6,7 @@ description: How to use the Glass library (io.github.angelomarzocchi.glass) — 
 # Glass
 
 Package `io.github.angelomarzocchi.glass`. Gradle:
-`implementation("com.github.angelomarzocchi.compose-glass:glass:<version>")` from `https://jitpack.io`.
+`implementation("com.github.angelomarzocchi:compose-glass:<version>")` from `https://jitpack.io`.
 minSdk 24; full glass on API 33+ (AGSL), frosted on 31–32, tinted on 24–30. No Material dependency.
 
 ## The one structural rule
