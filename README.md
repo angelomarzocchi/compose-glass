@@ -16,6 +16,17 @@ programs:
   and runs out to the rim. A selection is a light left on inside, the shape of its plate, which the rim
   catches as it passes. Engraved marks light up as the light reaches them.
 
+| From liquid to frosted | The same, dark | Light inside the glass |
+|:---:|:---:|:---:|
+| <img src="docs/media/glass-spectrum-light.jpg" width="250" alt="Five glass capsules over a travel feed, from liquid glass to milky frosted glass"> | <img src="docs/media/glass-spectrum-dark.jpg" width="250" alt="The same five materials over a night city and an aurora"> | <img src="docs/media/glass-lights.jpg" width="250" alt="Dark glass lit from none to full: a finger's lamp, a selection, both, and full"> |
+
+| Glass in place | Glass in place, dark |
+|:---:|:---:|
+| <img src="docs/media/glass-in-context-light.jpg" width="250" alt="An island, a frosted panel, a half-lit FAB and a tab bar in glass over a travel app"> | <img src="docs/media/glass-in-context-dark.jpg" width="250" alt="The same pieces in dark glass over a night city"> |
+
+<sub>Captured on an Android 16 emulator from `demo/`'s `GalleryActivity` (`--ei shot 0…4`). The app under the
+glass is an ordinary travel feed whose photos are painted in code.</sub>
+
 Full glass needs Android 13 (API 33, AGSL). Below that a surface falls back to frosted (API 31–32,
 `RenderEffect` blur) or tinted (24–30) glass with flat lights — it never crashes, and
 `glassShaderError()` tells you why.
