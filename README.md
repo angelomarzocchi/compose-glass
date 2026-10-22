@@ -47,7 +47,7 @@ dependencyResolutionManagement {
 
 // build.gradle.kts
 dependencies {
-    implementation("com.github.angelomarzocchi:compose-glass:0.1.0")
+    implementation("com.github.angelomarzocchi:compose-glass:0.2.0")
 }
 ```
 
@@ -91,10 +91,12 @@ Box(Modifier.fillMaxSize()) {
 | `GlassMaterial.clear(dark)` | Lit acrylic: a thin rim that bends the page only in its last few dp, depth shown by thickness and light. The default. |
 | `GlassMaterial.lens(dark)` | A wide rim that bends the page across all of it, splits the colours and mirrors the labels. Loud. |
 | `GlassMaterial.frosted(dark)` | Clear glass, frosted and denser, for a panel or a sheet that holds a lot to read. |
+| `GlassMaterial.liquid(dark)` | A lens with almost no slab: the page bends across a wide, soft rim, but the rim is barely shaded — only a fine line of light along the edge, and a fainter one on the far side. Apple's liquid glass rather than acrylic. |
 
 Every property is a field of the `GlassMaterial` data class — `copy()` it: rim width (`bevel`),
 `refraction`, `falloff`, `dispersion`, `frost`, `tint`/`tintAmount`, `edge`, `rim`, `specular`,
-`inkDepth`, `inkReflection`, `inkGlow`, `lampReach`.
+`inkDepth`, `inkReflection`, `inkGlow`, `lampReach`, and the fine line of light along the edge (`hairline`,
+as bright as the `rim` unless set, and `farHairline` for the far side).
 
 ### Lights
 

@@ -34,7 +34,7 @@ otherwise the glass sees transparency.
 val lamp = rememberGlassLamp()
 GlassSurface(
     backdrop = backdrop,
-    material = GlassMaterial.clear(dark),   // or lens(dark), frosted(dark), or .copy(...)
+    material = GlassMaterial.clear(dark),   // or liquid(dark), lens(dark), frosted(dark), or .copy(...)
     modifier = Modifier.size(280.dp, 64.dp).glassLampFollowsFinger(lamp),
     cornerRadius = null,                    // null = capsule; or e.g. 28.dp
     lamp = lamp,                            // the finger's light; same instance as in the modifier

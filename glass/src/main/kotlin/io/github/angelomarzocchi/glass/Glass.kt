@@ -112,6 +112,10 @@ public fun Modifier.glassBackdrop(backdrop: GlassBackdrop): Modifier = this
  * @param inkReflection how much of the engraving the rim mirrors.
  * @param inkGlow how far a lit engraving glows round itself.
  * @param lampReach how far the lamp's light spreads through the body.
+ * @param hairline how bright the fine line of light along the very edge is, on the side facing the room's
+ *   light: the edge seen, not the rim's depth. As bright as the [rim] unless said otherwise.
+ * @param farHairline the same line on the far side, where the light that went into a clear slab catches
+ *   the edge on its way out: liquid glass shows both.
  */
 @Immutable
 public data class GlassMaterial(
@@ -129,6 +133,8 @@ public data class GlassMaterial(
     val inkReflection: Float,
     val inkGlow: Dp,
     val lampReach: Dp,
+    val hairline: Float = rim,
+    val farHairline: Float = 0f,
 ) {
     public companion object {
         /**
@@ -170,6 +176,32 @@ public data class GlassMaterial(
             inkDepth = 0.5f,
             inkReflection = 0.18f,
             lampReach = 34.dp,
+        )
+
+        /**
+         * Liquid glass: a lens rather than a slab, with almost no slab to show. The page bends across a
+         * wide, soft rim — it magnifies as it nears the edge — but the rim is barely shaded: no darker
+         * band, no thick bevel, no highlight across it; only a fine line of light along the edge where
+         * the room's light catches it, and a fainter one on the far side. See-through, with frost
+         * enough to keep a label readable.
+         */
+        public fun liquid(dark: Boolean): GlassMaterial = GlassMaterial(
+            bevel = 16.dp,
+            refraction = 12.dp,
+            falloff = 2.4f,
+            dispersion = 0.02f,
+            frost = 3.dp,
+            tint = if (dark) Color(0xFF151518) else Color(0xFFF8F8FA),
+            tintAmount = if (dark) 0.44f else 0.32f,
+            edge = 0.06f,
+            rim = 0.14f,
+            specular = 0.05f,
+            inkDepth = 0.1f,
+            inkReflection = 0f,
+            inkGlow = 3.dp,
+            lampReach = 44.dp,
+            hairline = if (dark) 0.75f else 0.9f,
+            farHairline = 0.4f,
         )
 
         /** [clear] glass frosted, for a surface that holds a lot to read: a panel, a sheet. */
@@ -318,6 +350,7 @@ private class GlassPrograms {
         body.setFloatUniform("edge", material.edge)
         body.setFloatUniform("rim", material.rim)
         body.setFloatUniform("specular", material.specular)
+        body.setFloatUniform("hairline", material.hairline, material.farHairline)
         body.setFloatUniform("keyLight", lighting.keyLight.x, lighting.keyLight.y, KeyLightHeight)
         body.setFloatUniform("lamp", lighting.lamp.x, lighting.lamp.y, lighting.lampOn, material.lampReach.toPx())
         body.setFloatUniform("lampColor", lighting.lampColor.red, lighting.lampColor.green, lighting.lampColor.blue)
@@ -409,7 +442,7 @@ private fun DrawScope.drawPlainGlass(
         )
     }
     drawRoundRect(
-        color = Color.White.copy(alpha = 0.5f * material.rim),
+        color = Color.White.copy(alpha = 0.5f * material.hairline.coerceIn(0f, 1f)),
         topLeft = shape.topLeft,
         size = shape.size,
         cornerRadius = corner,

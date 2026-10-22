@@ -33,8 +33,8 @@ float2 boxNormal(float2 p, float2 b, float r) {
  * round the shape): bent by the rim so the edge magnifies — [falloff] is how far out towards the very
  * edge the bend is kept — split a little into its colours there, tinted the more glass there is to
  * look through, denser and a shade darker at the rim where it is thickest to look through ([edge]),
- * lit by the room — a highlight and a hairline on the side facing [keyLight], a shade on the other, a
- * whiter rim seen edge-on — and by two lights inside it: [lamp], under the finger, which the rim
+ * lit by the room — a highlight and a [hairline] on the side facing [keyLight] (and its far side, the
+ * second value), a shade on the other, a whiter rim seen edge-on — and by two lights inside it: [lamp], under the finger, which the rim
  * carries further than the body; and [sel], the plate of the selected tab, whose light the rim
  * catches near it.
  *
@@ -53,6 +53,7 @@ uniform float4 tint;
 uniform float edge;
 uniform float rim;
 uniform float specular;
+uniform float2 hairline;
 uniform float3 keyLight;
 uniform float4 lamp;
 uniform float3 lampColor;
@@ -99,7 +100,7 @@ half4 main(float2 fc) {
     col = mix(col, float3(1.0), fresnel * rim * 0.32);
     float3 hv = normalize(l + float3(0.0, 0.0, 1.0));
     col += pow(max(dot(n, hv), 0.0), 80.0) * specular;
-    col += smoothstep(1.6, 0.0, depth) * max(facing, 0.0) * 0.45 * rim;
+    col += smoothstep(1.6, 0.0, depth) * (max(facing, 0.0) * hairline.x + max(-facing, 0.0) * hairline.y) * 0.45;
 
     float dl = length(q - lamp.xy);
     float reach = max(lamp.w, 1.0);
