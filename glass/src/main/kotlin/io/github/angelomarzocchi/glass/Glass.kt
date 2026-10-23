@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -68,11 +69,17 @@ import kotlin.math.max
  * that a surface is frosted (31–32) or tinted (24–30), its lights drawn flat.
  */
 
-/** A page recorded once a frame, for the glass laid over it to see. */
+/**
+ * A page recorded once a frame, for the glass laid over it to see — or a still of one, taken every so
+ * often ([rememberStillGlassBackdrop]).
+ */
 @Stable
 public class GlassBackdrop internal constructor(internal val layer: GraphicsLayer) {
     /** Where the page is, in the root's pixels. */
     internal var origin by mutableStateOf(Offset.Zero)
+
+    /** Grows when a still is taken: the glass over it draws again, even where nothing else asks for a frame. */
+    internal var version by mutableIntStateOf(0)
 }
 
 /** A backdrop to record a page into, with [glassBackdrop], for glass laid over it. */
@@ -258,7 +265,7 @@ public val DefaultKeyLight: Offset = Offset(-0.35f, -1f)
  * that holds it. [GlassSurface] does all of this for a plain rounded surface.
  */
 @Stable
-public class GlassPainter internal constructor(private val layer: GraphicsLayer) {
+public class GlassPainter internal constructor(private val layer: GraphicsLayer, private val page: GraphicsLayer) {
     internal val lighting = GlassLighting()
 
     // A program that does not compile, or a renderer with no AGSL (Android Studio's preview), leaves
@@ -283,7 +290,7 @@ public class GlassPainter internal constructor(private val layer: GraphicsLayer)
     ) {
         val programs = programs
         if (Build.VERSION.SDK_INT >= 33 && programs is GlassPrograms) {
-            with(programs) { drawGlass(layer, backdrop, origin, material, lighting, shape, radius, dark, overhang) }
+            with(programs) { drawGlass(layer, page, backdrop, origin, material, lighting, shape, radius, dark, overhang) }
         } else {
             drawPlainGlass(layer, backdrop, origin, material, lighting, shape, radius)
         }
@@ -298,7 +305,7 @@ public class GlassPainter internal constructor(private val layer: GraphicsLayer)
     ): androidx.compose.ui.graphics.RenderEffect? {
         val programs = programs
         if (Build.VERSION.SDK_INT < 33 || programs !is GlassPrograms) return null
-        return programs.ink(density, material, lighting, shape, radius).asComposeRenderEffect()
+        return programs.ink(density, material, lighting, shape, radius)
     }
 
     /** Fills the lights for this frame: call before [drawBody] and [inkEffect], in both. */
@@ -312,7 +319,8 @@ public class GlassPainter internal constructor(private val layer: GraphicsLayer)
 @Composable
 public fun rememberGlassPainter(): GlassPainter {
     val layer = rememberGraphicsLayer()
-    return remember(layer) { GlassPainter(layer) }
+    val page = rememberGraphicsLayer()
+    return remember(layer, page) { GlassPainter(layer, page) }
 }
 
 /** Keeps [painter] told where the surface is. Put it where the surface's own bounds are measured. */
@@ -321,11 +329,24 @@ public fun Modifier.glassPosition(painter: GlassPainter): Modifier =
 
 @RequiresApi(33)
 private class GlassPrograms {
-    val body = RuntimeShader(GlassBodyShader)
-    val ink = RuntimeShader(GlassInkShader)
+    val body = Program(GlassBodyShader)
+    val ink = Program(GlassInkShader)
+
+    // A frame where nothing about the glass changed draws nothing new. The page under it is recorded once
+    // for where the glass is — what the page shows reaches it by itself — and frosted in a layer of its
+    // own; the body's program runs over that, in a second layer, and its effect is made again only when
+    // its numbers change. A light that moves (the room's, the lamp, a selection) then costs one pass of the
+    // program, not the page drawn again and frosted again under it.
+    private var pageSize = IntSize.Zero
+    private var pageAt = Offset.Unspecified
+    private var pageSource: GraphicsLayer? = null
+    private var frostRadius = -1f
+    private var frostEffect: androidx.compose.ui.graphics.RenderEffect? = null
+    private var bodySize = IntSize.Zero
 
     fun DrawScope.drawGlass(
         layer: GraphicsLayer,
+        page: GraphicsLayer,
         backdrop: GlassBackdrop,
         origin: Offset,
         material: GlassMaterial,
@@ -335,64 +356,138 @@ private class GlassPrograms {
         dark: Boolean,
         overhang: Float,
     ) {
+        // A still taken of the page ([rememberStillGlassBackdrop]) reaches the glass with a frame of its own.
+        backdrop.version
         val bend = material.refraction.toPx()
         val frost = material.frost.toPx()
         // Room round the shape for what the rim bends in from outside it, and for the blur to read.
         val room = ceil(max(-bend, 0f) * (1f + material.dispersion) + frost * 3f + overhang + 2f)
-        body.setFloatUniform("origin", room, room)
-        body.setFloatUniform("shape", shape.left, shape.top, shape.right, shape.bottom)
-        body.setFloatUniform("radius", radius)
-        body.setFloatUniform("bevel", material.bevel.toPx())
-        body.setFloatUniform("refraction", bend)
-        body.setFloatUniform("falloff", material.falloff)
-        body.setFloatUniform("dispersion", material.dispersion)
-        body.setFloatUniform("tint", material.tint.red, material.tint.green, material.tint.blue, material.tintAmount)
-        body.setFloatUniform("edge", material.edge)
-        body.setFloatUniform("rim", material.rim)
-        body.setFloatUniform("specular", material.specular)
-        body.setFloatUniform("hairline", material.hairline, material.farHairline)
-        body.setFloatUniform("keyLight", lighting.keyLight.x, lighting.keyLight.y, KeyLightHeight)
-        body.setFloatUniform("lamp", lighting.lamp.x, lighting.lamp.y, lighting.lampOn, material.lampReach.toPx())
-        body.setFloatUniform("lampColor", lighting.lampColor.red, lighting.lampColor.green, lighting.lampColor.blue)
-        body.setSelection(lighting)
-        body.setFloatUniform("selColor", lighting.selectionColor.red, lighting.selectionColor.green, lighting.selectionColor.blue)
-        body.setFloatUniform("dark", if (dark) 1f else 0f)
+        val size = IntSize(ceil(size.width + 2 * room).toInt(), ceil(size.height + 2 * room).toInt())
 
-        val bent = RenderEffect.createRuntimeShaderEffect(body, "content")
-        layer.renderEffect = (
-            if (frost > 0.5f) {
-                RenderEffect.createChainEffect(bent, RenderEffect.createBlurEffect(frost, frost, Shader.TileMode.CLAMP))
-            } else {
-                bent
-            }
-            ).asComposeRenderEffect()
+        if (frost != frostRadius) {
+            frostRadius = frost
+            frostEffect = if (frost > 0.5f) RenderEffect.createBlurEffect(frost, frost, Shader.TileMode.CLAMP).asComposeRenderEffect() else null
+        }
+        page.renderEffect = frostEffect
         val at = origin - backdrop.origin
-        layer.record(IntSize(ceil(size.width + 2 * room).toInt(), ceil(size.height + 2 * room).toInt())) {
-            translate(room - at.x, room - at.y) { drawLayer(backdrop.layer) }
+        if (size != pageSize || at != pageAt || backdrop.layer !== pageSource) {
+            page.record(size) { translate(room - at.x, room - at.y) { drawLayer(backdrop.layer) } }
+            pageSize = size
+            pageAt = at
+            pageSource = backdrop.layer
+        }
+
+        body.begin()
+        body.set("origin", room, room)
+        body.set("shape", shape.left, shape.top, shape.right, shape.bottom)
+        body.set("radius", radius)
+        body.set("bevel", material.bevel.toPx())
+        body.set("refraction", bend)
+        body.set("falloff", material.falloff)
+        body.set("dispersion", material.dispersion)
+        body.set("tint", material.tint.red, material.tint.green, material.tint.blue, material.tintAmount)
+        body.set("edge", material.edge)
+        body.set("rim", material.rim)
+        body.set("specular", material.specular)
+        body.set("hairline", material.hairline, material.farHairline)
+        body.set("keyLight", lighting.keyLight.x, lighting.keyLight.y, KeyLightHeight)
+        body.set("lamp", lighting.lamp.x, lighting.lamp.y, lighting.lampOn, material.lampReach.toPx())
+        body.set("lampColor", lighting.lampColor.red, lighting.lampColor.green, lighting.lampColor.blue)
+        body.setSelection(lighting)
+        body.set("selColor", lighting.selectionColor.red, lighting.selectionColor.green, lighting.selectionColor.blue)
+        body.set("dark", if (dark) 1f else 0f)
+        layer.renderEffect = body.effect()
+        if (size != bodySize) {
+            layer.record(size) { drawLayer(page) }
+            bodySize = size
         }
         translate(-room, -room) { drawLayer(layer) }
     }
 
-    fun ink(density: Density, material: GlassMaterial, lighting: GlassLighting, shape: Rect, radius: Float): RenderEffect =
+    fun ink(density: Density, material: GlassMaterial, lighting: GlassLighting, shape: Rect, radius: Float): androidx.compose.ui.graphics.RenderEffect =
         with(density) {
-            ink.setFloatUniform("shape", shape.left, shape.top, shape.right, shape.bottom)
-            ink.setFloatUniform("radius", radius)
-            ink.setFloatUniform("bevel", material.bevel.toPx())
-            ink.setFloatUniform("refraction", material.refraction.toPx() * material.inkDepth)
-            ink.setFloatUniform("reflection", material.inkReflection)
-            ink.setFloatUniform("lamp", lighting.lamp.x, lighting.lamp.y, lighting.lampOn, material.lampReach.toPx())
-            ink.setFloatUniform("lampColor", lighting.lampColor.red, lighting.lampColor.green, lighting.lampColor.blue)
-            ink.setFloatUniform("lampInk", lighting.lampInk.red, lighting.lampInk.green, lighting.lampInk.blue)
+            ink.begin()
+            ink.set("shape", shape.left, shape.top, shape.right, shape.bottom)
+            ink.set("radius", radius)
+            ink.set("bevel", material.bevel.toPx())
+            ink.set("refraction", material.refraction.toPx() * material.inkDepth)
+            ink.set("reflection", material.inkReflection)
+            ink.set("lamp", lighting.lamp.x, lighting.lamp.y, lighting.lampOn, material.lampReach.toPx())
+            ink.set("lampColor", lighting.lampColor.red, lighting.lampColor.green, lighting.lampColor.blue)
+            ink.set("lampInk", lighting.lampInk.red, lighting.lampInk.green, lighting.lampInk.blue)
             ink.setSelection(lighting)
-            ink.setFloatUniform("selInk", lighting.selectionInk.red, lighting.selectionInk.green, lighting.selectionInk.blue)
-            ink.setFloatUniform("glow", material.inkGlow.toPx())
-            RenderEffect.createRuntimeShaderEffect(ink, "content")
+            ink.set("selInk", lighting.selectionInk.red, lighting.selectionInk.green, lighting.selectionInk.blue)
+            ink.set("glow", material.inkGlow.toPx())
+            ink.effect()
         }
 
-    private fun RuntimeShader.setSelection(lighting: GlassLighting) {
+    private fun Program.setSelection(lighting: GlassLighting) {
         val s = lighting.selection
-        setFloatUniform("sel", s.left, s.top, s.right, s.bottom)
-        setFloatUniform("selOn", if (s.width > 0f && s.height > 0f) lighting.selectionOn else 0f)
+        set("sel", s.left, s.top, s.right, s.bottom)
+        set("selOn", if (s.width > 0f && s.height > 0f) lighting.selectionOn else 0f)
+    }
+}
+
+/**
+ * An AGSL program run as a render effect, and the numbers it was last given: [effect] is a new effect
+ * only when one of them changed since the last ([begin], the [set]s, then [effect]). A layer handed the
+ * same effect is not drawn again.
+ */
+@RequiresApi(33)
+private class Program(sksl: String) {
+    private val shader = RuntimeShader(sksl)
+    private val last = FloatArray(MaxValues)
+    private var count = 0
+    private var changed = true
+    private var effect: androidx.compose.ui.graphics.RenderEffect? = null
+
+    fun begin() {
+        count = 0
+    }
+
+    private fun note(value: Float) {
+        if (last[count] != value) {
+            last[count] = value
+            changed = true
+        }
+        count++
+    }
+
+    fun set(name: String, a: Float) {
+        note(a)
+        shader.setFloatUniform(name, a)
+    }
+
+    fun set(name: String, a: Float, b: Float) {
+        note(a)
+        note(b)
+        shader.setFloatUniform(name, a, b)
+    }
+
+    fun set(name: String, a: Float, b: Float, c: Float) {
+        note(a)
+        note(b)
+        note(c)
+        shader.setFloatUniform(name, a, b, c)
+    }
+
+    fun set(name: String, a: Float, b: Float, c: Float, d: Float) {
+        note(a)
+        note(b)
+        note(c)
+        note(d)
+        shader.setFloatUniform(name, a, b, c, d)
+    }
+
+    fun effect(): androidx.compose.ui.graphics.RenderEffect {
+        val made = effect
+        if (made != null && !changed) return made
+        changed = false
+        return RenderEffect.createRuntimeShaderEffect(shader, "content").asComposeRenderEffect().also { effect = it }
+    }
+
+    private companion object {
+        const val MaxValues = 64
     }
 }
 

@@ -190,9 +190,28 @@ fun rememberGlassIsland(backdrop: GlassBackdrop, material: GlassMaterial, keyLig
 
 ## Performance
 
-Each surface re-records the backdrop through its own layer every frame it is drawn, and runs two
-fragment shaders over its own area. Keep glass to the few surfaces that float (a bar, a FAB, an island,
-a panel); do not tile a list with it. The tilt sensor is only listened to while the screen is resumed.
+A surface is two layers and a third for what it holds: the page under it, frosted; the body's program
+over that; the engraving's program over its content. Each is drawn again only when what it depends on
+changes. The page under the glass changes whenever the page does, and takes the frost and the body with
+it; a light that moves — the room's, the lamp, a selection — costs one pass of a program, nothing under
+it; a frame where nothing changed costs nothing.
+
+Over a page that keeps changing (a video, a camera) every surface is drawn again every frame. Glass that
+floats over a part of it that hardly changes — a bar over a blurred background — can look at a still of
+the page instead, taken a few times a second:
+
+```kotlin
+val backdrop = rememberGlassBackdrop()
+val still = rememberStillGlassBackdrop(backdrop)          // every 250 ms, at half size
+GlassSurface(backdrop = still, material = …) { … }        // costs nothing between stills
+```
+
+The stills are drawn by a renderer of their own, made once; nothing waits for the GPU. On a camera
+viewfinder with eight surfaces, six of them over a blurred background, the GPU's time spent on the window
+went from about 60% to about 40%.
+
+Keep glass to the few surfaces that float (a bar, a FAB, an island, a panel); do not tile a list with
+it. The tilt sensor is only listened to while the screen is resumed.
 
 ## Demo
 

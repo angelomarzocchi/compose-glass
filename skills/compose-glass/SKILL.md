@@ -86,9 +86,13 @@ both libraries) maps `IslandLights` → `GlassLighting` (lamp, selection as a li
 
 ## Performance
 
-Each surface re-records the backdrop and runs two shaders over its area every frame it draws. Use glass
-for a handful of floating surfaces, not for list items. `frost` adds a blur pass: keep it modest on
-large panels.
+A surface draws again only what changed: the page under it (and its frost) when the page changes, one
+program pass when a light moves. Over a page that changes every frame (video, camera) every surface is
+drawn again every frame: for glass over a part of it that hardly changes (a bar over a blurred
+background), pass `rememberStillGlassBackdrop(backdrop)` instead of `backdrop` — a still of the page
+taken every 250 ms at half size, free between stills. Keep the live backdrop for glass over the moving
+image itself. Use glass for a handful of floating surfaces, not for list items. `frost` adds blur passes:
+keep it modest on large panels.
 
 ## Troubleshooting
 
