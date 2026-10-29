@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0
 
 - `rememberStillGlassBackdrop(source, every, scale)`: a still of the page, taken every `every` (250 ms)
   at `scale` (half) of its size, for glass over a part of a changing page that hardly changes — a bar
