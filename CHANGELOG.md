@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `GlassSurface(body = { … })`: whether the slab is drawn, read in draw. False leaves only what is
+  engraved in it, for a surface whose glass another takes over for a while — a bubble growing into a
+  sheet drawn with a `GlassPainter` of its own.
+
 ## 1.0.0
 
 - `rememberStillGlassBackdrop(source, every, scale)`: a still of the page, taken every `every` (250 ms)

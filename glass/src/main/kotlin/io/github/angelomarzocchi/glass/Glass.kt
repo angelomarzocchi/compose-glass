@@ -571,6 +571,8 @@ public fun glassShaderError(): String? {
  *   a deep violet on pale glass — pass your accent colour.
  * @param lighting adds the surface's own lights every frame, in its own pixels, after the lamp's: a
  *   selection, a key light that follows the device ([rememberTiltKeyLight]).
+ * @param body whether the slab is drawn, read in draw: false leaves only what is engraved in it — for a
+ *   surface whose glass another one takes over for a while, a bubble growing into a sheet.
  */
 @Composable
 public fun GlassSurface(
@@ -582,6 +584,7 @@ public fun GlassSurface(
     dark: Boolean = isSystemInDarkTheme(),
     lampInk: Color = Color.Unspecified,
     lighting: GlassLighting.(Size) -> Unit = {},
+    body: () -> Boolean = { true },
     content: @Composable BoxScope.() -> Unit,
 ) {
     val painter = rememberGlassPainter()
@@ -602,6 +605,7 @@ public fun GlassSurface(
         modifier
             .glassPosition(painter)
             .drawBehind {
+                if (!body()) return@drawBehind
                 val radius = cornerRadius?.toPx() ?: (size.minDimension / 2f)
                 painter.light { all(size) }
                 with(painter) { drawBody(backdrop, material, Rect(Offset.Zero, size), radius, dark) }
