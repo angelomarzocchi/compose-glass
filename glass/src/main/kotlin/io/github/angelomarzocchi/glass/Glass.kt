@@ -123,6 +123,7 @@ public fun Modifier.glassBackdrop(backdrop: GlassBackdrop): Modifier = this
  *   light: the edge seen, not the rim's depth. As bright as the [rim] unless said otherwise.
  * @param farHairline the same line on the far side, where the light that went into a clear slab catches
  *   the edge on its way out: liquid glass shows both.
+ * @param hairlineWidth how wide that line is, inside the edge; it fades out over its inner part.
  */
 @Immutable
 public data class GlassMaterial(
@@ -142,6 +143,7 @@ public data class GlassMaterial(
     val lampReach: Dp,
     val hairline: Float = rim,
     val farHairline: Float = 0f,
+    val hairlineWidth: Dp = 0.75.dp,
 ) {
     public companion object {
         /**
@@ -390,6 +392,7 @@ private class GlassPrograms {
         body.set("rim", material.rim)
         body.set("specular", material.specular)
         body.set("hairline", material.hairline, material.farHairline)
+        body.set("lineWidth", material.hairlineWidth.toPx())
         body.set("keyLight", lighting.keyLight.x, lighting.keyLight.y, KeyLightHeight)
         body.set("lamp", lighting.lamp.x, lighting.lamp.y, lighting.lampOn, material.lampReach.toPx())
         body.set("lampColor", lighting.lampColor.red, lighting.lampColor.green, lighting.lampColor.blue)

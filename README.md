@@ -96,7 +96,7 @@ Box(Modifier.fillMaxSize()) {
 Every property is a field of the `GlassMaterial` data class — `copy()` it: rim width (`bevel`),
 `refraction`, `falloff`, `dispersion`, `frost`, `tint`/`tintAmount`, `edge`, `rim`, `specular`,
 `inkDepth`, `inkReflection`, `inkGlow`, `lampReach`, and the fine line of light along the edge (`hairline`,
-as bright as the `rim` unless set, and `farHairline` for the far side).
+as bright as the `rim` unless set, `farHairline` for the far side, and `hairlineWidth`, 0.75 dp by default).
 
 ### Lights
 

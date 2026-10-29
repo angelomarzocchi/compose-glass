@@ -54,6 +54,7 @@ uniform float edge;
 uniform float rim;
 uniform float specular;
 uniform float2 hairline;
+uniform float lineWidth;
 uniform float3 keyLight;
 uniform float4 lamp;
 uniform float3 lampColor;
@@ -100,7 +101,21 @@ half4 main(float2 fc) {
     col = mix(col, float3(1.0), fresnel * rim * 0.32);
     float3 hv = normalize(l + float3(0.0, 0.0, 1.0));
     col += pow(max(dot(n, hv), 0.0), 80.0) * specular;
-    col += smoothstep(1.6, 0.0, depth) * (max(facing, 0.0) * hairline.x + max(-facing, 0.0) * hairline.y) * 0.45;
+    // The edge's line of light lies wholly inside the shape, [lineWidth] wide and fading inwards, averaged
+    // over the pixel across the edge: on a curve it keeps its width instead of breaking into steps, and
+    // the silhouette's own smoothing does not cut half of it away. It never goes out: where the edge is
+    // side-on to the light it dims to a share of both sides' brightness, not to nothing.
+    float s = -d;
+    float lw = max(lineWidth, 1.0);
+    float line = 0.0;
+    for (int i = 0; i < 4; i++) {
+        float t = s + (float(i) - 1.5) * 0.25;
+        line += t < 0.0 ? 0.0 : 1.0 - smoothstep(lw * 0.5, lw * 1.4, t);
+    }
+    line *= 0.25;
+    float sideOn = mix(hairline.y, hairline.x, facing * 0.5 + 0.5) * (0.3 + 0.7 * abs(facing));
+    // The line's share of the pixel, over the shape's share: the colour is weighted by the latter below.
+    col += min(line / max(clamp(s + 0.5, 0.0, 1.0), 0.001), 1.0) * sideOn * 0.4;
 
     float dl = length(q - lamp.xy);
     float reach = max(lamp.w, 1.0);
