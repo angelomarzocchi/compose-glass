@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
 
 - `GlassSurface(body = { … })`: whether the slab is drawn, read in draw. False leaves only what is
   engraved in it, for a surface whose glass another takes over for a while — a bubble growing into a
