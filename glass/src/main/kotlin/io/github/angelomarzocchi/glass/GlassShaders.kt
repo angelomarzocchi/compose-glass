@@ -156,8 +156,10 @@ half4 main(float2 fc) {
     float dl = length(q - lamp.xy);
     float reach = max(lamp.w, 1.0);
     float glow = exp(-(dl * dl) / (reach * reach));
-    float carried = band * exp(-dl / (reach * 2.2));
-    float lampLight = lamp.z * (glow * 0.5 + carried * 1.0);
+    // The rim carries the lamp's light further than the body does, but not all round it: a soft light
+    // under the finger, not a fog over the glass.
+    float carried = band * exp(-dl / (reach * 1.6));
+    float lampLight = lamp.z * (glow * 0.35 + carried * 0.55);
 
     float2 sc = (sel.xy + sel.zw) * 0.5;
     float2 sb = max((sel.zw - sel.xy) * 0.5, float2(0.5));
@@ -239,7 +241,10 @@ half4 main(float2 fc) {
     float selLit = selOn * (1.0 - smoothstep(-3.0, 3.0, ds));
 
     float3 base = ink.a > 0.001 ? ink.rgb / ink.a : float3(0.0);
-    float3 colour = mix(base, lampInk, lampLit * (1.0 - selLit));
+    // The lamp lights the marks up rather than repaints them: its colour screens what is there, so a dark
+    // label turns the lamp's colour and a white one stays white (a white letter on a coloured disc keeps
+    // its contrast). The selection's light does repaint them, into its own ink.
+    float3 colour = 1.0 - (1.0 - base) * (1.0 - lampInk * (lampLit * (1.0 - selLit)));
     colour = mix(colour, selInk, selLit);
     float3 rgb = colour * ink.a;
     float alpha = ink.a;

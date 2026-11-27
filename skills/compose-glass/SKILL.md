@@ -87,14 +87,19 @@ For a surface with its own geometry (ends that move, a custom outline): `remembe
 `Modifier.glassPosition(painter)` where the surface is laid out, then in `drawBehind` call
 `painter.light { … }` and `with(painter) { drawBody(backdrop, material, shape, radius, dark, overhang) }`,
 and in a `graphicsLayer` on the content call `painter.light { … }` again and set
-`renderEffect = painter.inkEffect(this, material, shape, radius)`. Call `light {}` before both: each
-call resets the lights. One painter per surface.
+`renderEffect = painter.inkEffect(this, material, shape, radius)` and
+`compositingStrategy = if (painter.engravingIsolated()) Offscreen else Auto`; after it, in
+`drawWithContent`, call `with(painter) { drawEngraving(material) }` instead of `drawContent()` (below full
+quality it colours the marks in the lights). Call `light {}` before each: every call resets the lights.
+One painter per surface.
 
 ## With compose-lumen's FloatingNavBar
 
-`FloatingNavBar(material = …)` takes an `IslandMaterial`. The adapter `GlassIsland` (in the README of
-both libraries) maps `IslandLights` → `GlassLighting` (lamp, selection as a light inside, accent as
-`selectionColor`) and calls `drawBody` / `inkEffect`. Its `modifier` must be `Modifier.glassPosition(painter)`.
+`FloatingNavBar(material = …)` takes an `IslandMaterial`. The adapter `GlassIsland` (in the README)
+maps `IslandLights` → `GlassLighting` (lamp, selection as a light inside, accent as `selectionColor`)
+and calls `drawBody` / `inkEffect`, and — with compose-lumen 1.3.0 or later — `drawEngraving` /
+`engravingIsolated` from `drawMarks` / `isolatesContent`, so the selected label turns white below full
+quality too. Its `modifier` must be `Modifier.glassPosition(painter)`.
 
 ## Fallbacks and diagnosis
 

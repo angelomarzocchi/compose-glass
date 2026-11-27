@@ -27,5 +27,16 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "compose-glass"
+
+// compose-lumen from its own sources when they sit next to this repository: the demo then runs against
+// lumen as it is being changed. Elsewhere (CI, JitPack), or with -Pglass.lumenFromJitPack=true, it comes
+// from JitPack.
+if (file("../compose-lumen/settings.gradle.kts").exists() && providers.gradleProperty("glass.lumenFromJitPack").orNull != "true") {
+    includeBuild("../compose-lumen") {
+        dependencySubstitution {
+            substitute(module("com.github.angelomarzocchi:compose-lumen")).using(project(":lumen"))
+        }
+    }
+}
 include(":glass")
 include(":demo")

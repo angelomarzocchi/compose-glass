@@ -31,6 +31,15 @@
   line of light along the edge glinting where the light meets it, the glass's shadow (rings below API
   28), and the lights clipped to the shape. It no longer makes a new blur and records the page again on
   every frame. `GlassSurface` colours its marks in the lights without the engraving's program too.
+- The finger's lamp is softer: less of its light carried round the rim, a light under the finger rather
+  than a fog over dark glass. It lights the engraved marks up instead of repainting them (its ink screens
+  what is there): a dark label turns the lamp's colour, a white letter on a coloured disc stays white.
+- `liquid()` at finish 0 has a wider rim and a gentler bend (24 dp, 10 dp): the page at the rim no longer
+  folds over itself and shows twice.
+- `GlassPainter.drawEngraving` and `engravingIsolated`, public: a surface drawn with the painter colours
+  its marks in the lights below full quality too. compose-lumen 1.3.0's `IslandMaterial.drawMarks` and
+  `isolatesContent` take them: the README's `GlassIsland` adapter shows how.
+- Demo: built against compose-lumen's sources when they sit next to this repository.
 - Demo: the lab has the qualities on chips; the gallery takes `--es quality Frosted`.
 - Demo: the lab opens on liquid glass with a finish slider, the room's light off; the gallery shows the
   finish from 0 to 1 and compose-lumen's bar in glass (`--ei shot 5`, `6`).

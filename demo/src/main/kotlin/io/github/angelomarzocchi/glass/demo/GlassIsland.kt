@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RenderEffect
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.Density
 import io.github.angelomarzocchi.glass.DefaultKeyLight
@@ -50,6 +51,17 @@ class GlassIsland(
     override fun contentEffect(density: Density, shape: Rect, radius: Float, lights: IslandLights): RenderEffect? {
         painter.light { from(lights) }
         return painter.inkEffect(density, material, shape, radius)
+    }
+
+    // Without the engraving's program (below full quality) the marks take the lights' colours here.
+    override fun ContentDrawScope.drawMarks(shape: Rect, radius: Float, lights: IslandLights) {
+        painter.light { from(lights) }
+        with(painter) { drawEngraving(material) }
+    }
+
+    override fun isolatesContent(lights: IslandLights): Boolean {
+        painter.light { from(lights) }
+        return painter.engravingIsolated()
     }
 }
 

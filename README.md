@@ -154,7 +154,12 @@ Box(
         }
         .graphicsLayer {
             painter.light { /* the same lights */ }
-            renderEffect = painter.inkEffect(this, material, myRect, r)   // engraving; null below API 33
+            renderEffect = painter.inkEffect(this, material, myRect, r)   // engraving; null below full quality
+            compositingStrategy = if (painter.engravingIsolated()) CompositingStrategy.Offscreen else CompositingStrategy.Auto
+        }
+        .drawWithContent {
+            painter.light { /* the same lights */ }
+            with(painter) { drawEngraving(material) }   // the marks, coloured in the lights where there is no effect
         },
 ) { /* content */ }
 ```
@@ -162,7 +167,8 @@ Box(
 ### A navigation bar in glass
 
 [compose-lumen](https://github.com/angelomarzocchi/compose-lumen)'s `FloatingNavBar` takes an
-`IslandMaterial`. This adapter puts it in glass — the selected tab becomes a light inside:
+`IslandMaterial`. This adapter puts it in glass — the selected tab becomes a light inside (compose-lumen
+1.3.0 or later; on 1.2 leave out `drawMarks` and `isolatesContent`):
 
 ```kotlin
 class GlassIsland(
@@ -192,6 +198,17 @@ class GlassIsland(
     override fun contentEffect(density: Density, shape: Rect, radius: Float, lights: IslandLights): RenderEffect? {
         painter.light { from(lights) }
         return painter.inkEffect(density, material, shape, radius)
+    }
+
+    // Below full quality there is no engraving effect: the marks take the lights' colours here instead.
+    override fun ContentDrawScope.drawMarks(shape: Rect, radius: Float, lights: IslandLights) {
+        painter.light { from(lights) }
+        with(painter) { drawEngraving(material) }
+    }
+
+    override fun isolatesContent(lights: IslandLights): Boolean {
+        painter.light { from(lights) }
+        return painter.engravingIsolated()
     }
 }
 

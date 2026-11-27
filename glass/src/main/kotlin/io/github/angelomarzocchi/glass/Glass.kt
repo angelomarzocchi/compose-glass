@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
@@ -223,9 +224,11 @@ public data class GlassMaterial(
         /** [liquid] glass at the matte end of its finish: frosted and full-bodied, for a panel or a sheet to read on. */
         public fun matte(dark: Boolean): GlassMaterial = liquid(dark, finish = 1f)
 
+        // The bend never folds the page over itself: refraction times falloff stays under the rim's width,
+        // or a band of the page at the rim would show twice, the second time upside down.
         private fun liquidEnd(dark: Boolean) = GlassMaterial(
-            bevel = 18.dp,
-            refraction = 14.dp,
+            bevel = 24.dp,
+            refraction = 10.dp,
             falloff = 2.2f,
             dispersion = 0.025f,
             frost = 0.dp,
@@ -408,12 +411,21 @@ public class GlassPainter internal constructor(
     }
 
     /**
-     * What engraved marks turn in the lights when the surface is drawn plain ([drawsPlain]), over what it
-     * holds: the layer that holds it must then be drawn off-screen while a light is on.
+     * Draws what is engraved (the content of the layer [inkEffect] is given to, from its
+     * `drawWithContent`) and, where there is no [inkEffect] (below [GlassQuality.Full]), the colours the
+     * marks take in the lights over it. That layer must be drawn off-screen while [engravingIsolated]
+     * says so. Call [light] first.
      */
-    internal fun DrawScope.drawPlainInk(material: GlassMaterial) {
-        if (drawsPlain && PlainGlass.lit(lighting)) with(plain) { drawInkLights(material, lighting) }
+    public fun ContentDrawScope.drawEngraving(material: GlassMaterial) {
+        if (drawsPlain && PlainGlass.lit(lighting)) with(plain) { drawMarksLit(material, lighting) } else drawContent()
     }
+
+    /**
+     * Whether the layer that holds what is engraved has to be drawn off-screen this frame, for
+     * [drawEngraving] to colour the marks alone: below [GlassQuality.Full], while a light is on. Call
+     * [light] first.
+     */
+    public fun engravingIsolated(): Boolean = drawsPlain && PlainGlass.lit(lighting)
 
     /**
      * The engraving's render effect, for the layer holding what is engraved: null below API 33, below
@@ -748,14 +760,11 @@ public fun GlassSurface(
                 shape = outline
                 clip = true
                 // Drawn plain, the marks take the lights' colours over themselves alone: off-screen, while lit.
-                compositingStrategy = if (painter.drawsPlain && PlainGlass.lit(painter.lighting)) CompositingStrategy.Offscreen else CompositingStrategy.Auto
+                compositingStrategy = if (painter.engravingIsolated()) CompositingStrategy.Offscreen else CompositingStrategy.Auto
             }
             .drawWithContent {
-                drawContent()
-                if (painter.drawsPlain) {
-                    painter.light { all(size) }
-                    with(painter) { drawPlainInk(material) }
-                }
+                painter.light { all(size) }
+                with(painter) { drawEngraving(material) }
             },
         content = content,
     )

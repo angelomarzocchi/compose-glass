@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -178,7 +179,7 @@ internal class PlainGlass(private val layer: GraphicsLayer) {
         if (on <= 0f || reach <= 0f) return
         drawRect(
             Brush.radialGradient(
-                0f to lighting.lampColor.copy(alpha = on * if (dark) 0.35f else 0.45f),
+                0f to lighting.lampColor.copy(alpha = on * if (dark) 0.25f else 0.35f),
                 1f to Color.Transparent,
                 center = lighting.lamp,
                 radius = reach * 1.6f,
@@ -233,11 +234,33 @@ internal class PlainGlass(private val layer: GraphicsLayer) {
     }
 
     /**
-     * What engraved marks turn in the lights, without the engraving's program: drawn over the content
-     * with [BlendMode.SrcAtop], so only the marks take the colour. The layer holding them must be drawn
-     * off-screen while a light is on ([lit]).
+     * What engraved marks turn in the lights, without the engraving's program, drawn with them: the lamp
+     * lights them up (its ink screened over the marks alone), the selection repaints them in its ink. The
+     * layer holding them must be drawn off-screen while a light is on ([lit]), for both to keep to the marks.
      */
-    fun DrawScope.drawInkLights(material: GlassMaterial, lighting: GlassLighting) {
+    fun ContentDrawScope.drawMarksLit(material: GlassMaterial, lighting: GlassLighting) {
+        drawContent()
+        val lamp = lighting.lampOn.coerceIn(0f, 1f)
+        val reach = material.lampReach.toPx()
+        if (lamp > 0f && reach > 0f) {
+            // The marks again, screened with the lamp's ink, laid over themselves only.
+            val canvas = drawContext.canvas
+            canvas.saveLayer(Rect(Offset.Zero, size), atop)
+            drawContent()
+            drawCircle(
+                Brush.radialGradient(
+                    0f to lighting.lampInk.copy(alpha = lamp),
+                    0.45f to lighting.lampInk.copy(alpha = lamp * 0.6f),
+                    1f to Color.Transparent,
+                    center = lighting.lamp,
+                    radius = reach * 1.4f,
+                ),
+                radius = reach * 1.4f,
+                center = lighting.lamp,
+                blendMode = BlendMode.Screen,
+            )
+            canvas.restore()
+        }
         val s = lighting.selection
         val selected = lighting.selectionOn.coerceIn(0f, 1f)
         if (selected > 0f && s.width > 0f && s.height > 0f) {
@@ -249,23 +272,9 @@ internal class PlainGlass(private val layer: GraphicsLayer) {
                 blendMode = BlendMode.SrcAtop,
             )
         }
-        val lamp = lighting.lampOn.coerceIn(0f, 1f)
-        val reach = material.lampReach.toPx()
-        if (lamp > 0f && reach > 0f) {
-            drawCircle(
-                Brush.radialGradient(
-                    0f to lighting.lampInk.copy(alpha = lamp),
-                    0.45f to lighting.lampInk.copy(alpha = lamp * 0.6f),
-                    1f to Color.Transparent,
-                    center = lighting.lamp,
-                    radius = reach * 1.4f,
-                ),
-                radius = reach * 1.4f,
-                center = lighting.lamp,
-                blendMode = BlendMode.SrcAtop,
-            )
-        }
     }
+
+    private val atop = androidx.compose.ui.graphics.Paint().apply { blendMode = BlendMode.SrcAtop }
 
     companion object {
         /** Whether any light is on, for the marks to take its colour. */
