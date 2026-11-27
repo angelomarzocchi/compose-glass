@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 2.0.0
+
+Liquid glass, faster, and on every device. Upgrading from 1.x:
+
+- Use `GlassMaterial.liquid(dark, finish = 0.3f)` where you had `clear(dark)`, and `matte(dark)` where
+  you had `frosted(dark)`. The acrylic presets are still there, and look as they did.
+- Drop `rememberTiltKeyLight()` unless you want the glints to follow the phone.
+- Rebuild: `GlassMaterial` has new fields, so its constructor and `copy()` changed.
+- Call `prepareGlass()` off the main thread at start.
+- A `GlassPainter` surface: add `compositingStrategy = …engravingIsolated()…` and `drawEngraving` (see
+  the README). With compose-lumen, update to 1.3.0 and add the adapter's two new overrides.
+- Older and modest devices now draw frosted or tinted liquid glass by themselves (`GlassQuality`).
 
 - **Liquid glass is the glass.** `GlassMaterial.liquid(dark, finish)` runs from the clear lens (`finish`
   0) to matte (1) along one knob, and `GlassMaterial.matte(dark)` is its far end. No bevel and no side in
@@ -40,6 +51,8 @@
   its marks in the lights below full quality too. compose-lumen 1.3.0's `IslandMaterial.drawMarks` and
   `isolatesContent` take them: the README's `GlassIsland` adapter shows how.
 - Demo: built against compose-lumen's sources when they sit next to this repository.
+- The skill (`skills/compose-glass`) rewritten for liquid glass: a workflow, recipes, the full compose-lumen
+  adapter, qualities, a performance budget, what the user should see, and the usual mistakes.
 - Demo: the lab has the qualities on chips; the gallery takes `--es quality Frosted`.
 - Demo: the lab opens on liquid glass with a finish slider, the room's light off; the gallery shows the
   finish from 0 to 1 and compose-lumen's bar in glass (`--ei shot 5`, `6`).

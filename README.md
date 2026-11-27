@@ -52,7 +52,7 @@ dependencyResolutionManagement {
 
 // build.gradle.kts
 dependencies {
-    implementation("com.github.angelomarzocchi:compose-glass:1.1.1")
+    implementation("com.github.angelomarzocchi:compose-glass:2.0.0")
 }
 ```
 
