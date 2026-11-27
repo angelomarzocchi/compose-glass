@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -33,6 +34,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -353,13 +355,31 @@ public val DefaultKeyLight: Offset = Offset(-0.35f, -1f)
  * that holds it. [GlassSurface] does all of this for a plain rounded surface.
  */
 @Stable
-public class GlassPainter internal constructor(private val layer: GraphicsLayer, private val page: GraphicsLayer) {
+public class GlassPainter internal constructor(
+    private val layer: GraphicsLayer,
+    private val page: GraphicsLayer,
+    plainLayer: GraphicsLayer,
+) {
     internal val lighting = GlassLighting()
+
+    /** How much of the glass is drawn ([rememberGlassQuality]): kept by [rememberGlassPainter]. */
+    internal var quality by mutableStateOf(GlassQuality.Full)
 
     // A program that does not compile, or a renderer with no AGSL (Android Studio's preview), leaves
     // the surface on plain glass rather than taking the screen down: [glassShaderError] says why.
-    private val programs: Any? =
+    private val programs: Any? by lazy {
         if (Build.VERSION.SDK_INT >= 33) runCatching { GlassPrograms() }.getOrNull() else null
+    }
+
+    private val plain = PlainGlass(plainLayer)
+
+    /** The programs, when this surface is drawn in full; null when it is drawn plain. */
+    private val fullPrograms: Any?
+        get() = if (quality == GlassQuality.Full && Build.VERSION.SDK_INT >= 33) programs else null
+
+    /** Whether this surface is drawn without its programs: its engraving's lights are then drawn flat. */
+    internal val drawsPlain: Boolean
+        get() = fullPrograms !is GlassPrograms
 
     /** Where the surface is, in the root's pixels. */
     internal var origin by mutableStateOf(Offset.Zero)
@@ -376,22 +396,36 @@ public class GlassPainter internal constructor(private val layer: GraphicsLayer,
         dark: Boolean,
         overhang: Float = 0f,
     ) {
-        val programs = programs
+        val programs = fullPrograms
         if (Build.VERSION.SDK_INT >= 33 && programs is GlassPrograms) {
             with(programs) { drawGlass(layer, page, backdrop, origin, material, lighting, shape, radius, dark, overhang) }
         } else {
-            drawPlainGlass(layer, backdrop, origin, material, lighting, shape, radius)
+            // Full glass with no programs to draw it with (a preview, a driver that will not compile them)
+            // is the next best thing.
+            val drawn = if (quality == GlassQuality.Full) GlassQuality.Frosted else quality
+            with(plain) { draw(drawn, backdrop, origin, material, lighting, shape, radius, dark) }
         }
     }
 
-    /** The engraving's render effect, for the layer holding what is engraved: null below API 33. */
+    /**
+     * What engraved marks turn in the lights when the surface is drawn plain ([drawsPlain]), over what it
+     * holds: the layer that holds it must then be drawn off-screen while a light is on.
+     */
+    internal fun DrawScope.drawPlainInk(material: GlassMaterial) {
+        if (drawsPlain && PlainGlass.lit(lighting)) with(plain) { drawInkLights(material, lighting) }
+    }
+
+    /**
+     * The engraving's render effect, for the layer holding what is engraved: null below API 33, below
+     * [GlassQuality.Full], and while nothing bends, mirrors or lights the engraving.
+     */
     public fun inkEffect(
         density: Density,
         material: GlassMaterial,
         shape: Rect,
         radius: Float,
     ): androidx.compose.ui.graphics.RenderEffect? {
-        val programs = programs
+        val programs = fullPrograms
         if (Build.VERSION.SDK_INT < 33 || programs !is GlassPrograms) return null
         // An engraving that nothing bends, mirrors or lights looks the same without its program: no effect,
         // and the layer that holds it is not drawn off-screen first. A light coming on brings it back.
@@ -408,12 +442,16 @@ public class GlassPainter internal constructor(private val layer: GraphicsLayer,
     }
 }
 
-/** A painter for one glass surface. */
+/** A painter for one glass surface, drawn at the quality [rememberGlassQuality] gives here. */
 @Composable
 public fun rememberGlassPainter(): GlassPainter {
     val layer = rememberGraphicsLayer()
     val page = rememberGraphicsLayer()
-    return remember(layer, page) { GlassPainter(layer, page) }
+    val plainLayer = rememberGraphicsLayer()
+    val quality = rememberGlassQuality()
+    val painter = remember(layer, page, plainLayer) { GlassPainter(layer, page, plainLayer).also { it.quality = quality } }
+    SideEffect { painter.quality = quality }
+    return painter
 }
 
 /** Keeps [painter] told where the surface is. Put it where the surface's own bounds are measured. */
@@ -617,69 +655,15 @@ private class Program(private val shader: RuntimeShader) {
     }
 }
 
-/**
- * Glass without AGSL: the page frosted where the platform can blur it (31–32), and the body's tint over
- * it, more of it; the lights drawn on top as plain glows, and a hairline for the rim.
- */
-private fun DrawScope.drawPlainGlass(
-    layer: GraphicsLayer,
-    backdrop: GlassBackdrop,
-    origin: Offset,
-    material: GlassMaterial,
-    lighting: GlassLighting,
-    shape: Rect,
-    radius: Float,
-) {
-    val corner = CornerRadius(radius)
-    if (Build.VERSION.SDK_INT >= 31) {
-        val frost = max(material.frost.toPx(), 12.dp.toPx())
-        layer.renderEffect = RenderEffect.createBlurEffect(frost, frost, Shader.TileMode.CLAMP).asComposeRenderEffect()
-        val at = origin - backdrop.origin
-        layer.record(IntSize(ceil(size.width).toInt().coerceAtLeast(1), ceil(size.height).toInt().coerceAtLeast(1))) {
-            translate(-at.x, -at.y) { drawLayer(backdrop.layer) }
-        }
-        drawLayer(layer)
-    }
-    val tint = if (Build.VERSION.SDK_INT >= 31) material.tintAmount + 0.2f else 0.92f
-    drawRoundRect(material.tint.copy(alpha = tint.coerceIn(0f, 1f)), shape.topLeft, shape.size, corner)
-    if (lighting.selectionOn > 0f && lighting.selection.width > 0f) {
-        drawRoundRect(
-            color = lighting.selectionColor.copy(alpha = 0.45f * lighting.selectionOn),
-            topLeft = lighting.selection.topLeft,
-            size = lighting.selection.size,
-            cornerRadius = CornerRadius(lighting.selection.height / 2f),
-        )
-    }
-    if (lighting.lampOn > 0f && material.lampReach > 0.dp) {
-        drawRect(
-            Brush.radialGradient(
-                0f to lighting.lampColor.copy(alpha = 0.35f * lighting.lampOn),
-                1f to Color.Transparent,
-                center = lighting.lamp,
-                radius = material.lampReach.toPx() * 1.6f,
-            ),
-            topLeft = shape.topLeft,
-            size = shape.size,
-        )
-    }
-    drawRoundRect(
-        color = Color.White.copy(alpha = 0.5f * material.hairline.coerceIn(0f, 1f)),
-        topLeft = shape.topLeft,
-        size = shape.size,
-        cornerRadius = corner,
-        style = Stroke(width = 1.dp.toPx()),
-    )
-}
-
 /** How high over the glass the room's light is, against its 1 of reach across the screen. */
 private const val KeyLightHeight = 0.9f
 
 /** From how much frost on the page under the glass is blurred at half its size. */
-private val HalfSizeFrost = 4.dp
+internal val HalfSizeFrost = 4.dp
 
 /** How far the glass's shadow spreads round it, and how far down it falls. */
-private val ShadowSpread = 14.dp
-private val ShadowDrop = 4.dp
+internal val ShadowSpread = 14.dp
+internal val ShadowDrop = 4.dp
 
 /**
  * Why glass is drawn plain on this device, or null when it is drawn in full: below API 33 there is no
@@ -763,6 +747,15 @@ public fun GlassSurface(
                 renderEffect = painter.inkEffect(this, material, Rect(Offset.Zero, size), radius)
                 shape = outline
                 clip = true
+                // Drawn plain, the marks take the lights' colours over themselves alone: off-screen, while lit.
+                compositingStrategy = if (painter.drawsPlain && PlainGlass.lit(painter.lighting)) CompositingStrategy.Offscreen else CompositingStrategy.Auto
+            }
+            .drawWithContent {
+                drawContent()
+                if (painter.drawsPlain) {
+                    painter.light { all(size) }
+                    with(painter) { drawPlainInk(material) }
+                }
             },
         content = content,
     )

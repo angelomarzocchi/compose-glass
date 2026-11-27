@@ -22,6 +22,16 @@
 - `rememberTiltKeyLight` lets a turn through only past a quarter of a degree: a hand holding the phone
   still no longer redraws every glass fifty times a second.
 - `GlassSurface` clips what it holds to its shape, lit or not.
+- `GlassQuality` — `Full`, `Frosted`, `Tinted` — with `LocalGlassQuality` to ask for one and
+  `rememberGlassQuality()` to read it. By default a device draws all its Android version allows, but an
+  Android Go or low-memory device is `Tinted`, a phone under about 3 GB is `Frosted`, and battery saver
+  holds glass at `Frosted` while it is on.
+- Plain glass rewritten to look like the liquid glass: the page frosted at half size and a little
+  richer in colour, cut to the shape (it used to show a frosted rectangle past a capsule's ends), the
+  line of light along the edge glinting where the light meets it, the glass's shadow (rings below API
+  28), and the lights clipped to the shape. It no longer makes a new blur and records the page again on
+  every frame. `GlassSurface` colours its marks in the lights without the engraving's program too.
+- Demo: the lab has the qualities on chips; the gallery takes `--es quality Frosted`.
 - Demo: the lab opens on liquid glass with a finish slider, the room's light off; the gallery shows the
   finish from 0 to 1 and compose-lumen's bar in glass (`--ei shot 5`, `6`).
 

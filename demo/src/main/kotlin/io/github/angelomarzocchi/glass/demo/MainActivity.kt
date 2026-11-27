@@ -83,6 +83,10 @@ import io.github.angelomarzocchi.glass.glassBackdrop
 import io.github.angelomarzocchi.glass.glassLampFollowsFinger
 import io.github.angelomarzocchi.glass.glassShaderError
 import io.github.angelomarzocchi.glass.prepareGlass
+import io.github.angelomarzocchi.glass.GlassQuality
+import io.github.angelomarzocchi.glass.LocalGlassQuality
+import io.github.angelomarzocchi.glass.rememberGlassQuality
+import androidx.compose.runtime.CompositionLocalProvider
 import io.github.angelomarzocchi.glass.rememberGlassBackdrop
 import io.github.angelomarzocchi.glass.rememberGlassLamp
 import io.github.angelomarzocchi.glass.rememberTiltKeyLight
@@ -131,6 +135,9 @@ private enum class Preset(val label: String) {
 private class LabState(dark: Boolean) {
     var dark by mutableStateOf(dark)
     var preset by mutableStateOf(Preset.Liquid)
+
+    /** Null: the device's own. */
+    var quality by mutableStateOf<GlassQuality?>(null)
     var finish by mutableFloatStateOf(0.3f)
     var bevel by mutableFloatStateOf(0f)
     var refraction by mutableFloatStateOf(0f)
@@ -202,6 +209,7 @@ private fun GlassLab() {
     val systemDark = isSystemInDarkTheme()
     val state = remember { LabState(systemDark) }
     MaterialTheme(colorScheme = if (state.dark) darkColorScheme() else lightColorScheme()) {
+      CompositionLocalProvider(LocalGlassQuality provides state.quality) {
         val backdrop = rememberGlassBackdrop()
         val roomLight = rememberTiltKeyLight(enabled = state.tilt)
         val material = state.material()
@@ -272,6 +280,7 @@ private fun GlassLab() {
                 Panel(state, backdrop, roomLight)
             }
         }
+      }
     }
 }
 
@@ -515,6 +524,17 @@ private fun Panel(state: LabState, backdrop: GlassBackdrop, roomLight: () -> Off
                 LabSlider("Finish: liquid to matte", state.finish, 0f..1f, percent(state.finish)) {
                     state.finish = it
                     state.reset()
+                }
+            }
+            val device = rememberGlassQuality()
+            Text("Quality: $device", style = MaterialTheme.typography.labelLarge, color = colors.onSurface, modifier = Modifier.padding(top = 6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                (listOf<GlassQuality?>(null) + GlassQuality.entries).forEach { quality ->
+                    FilterChip(
+                        selected = state.quality == quality,
+                        onClick = { state.quality = quality },
+                        label = { Text(quality?.name ?: "Auto") },
+                    )
                 }
             }
             LabSwitch("Dark", state.dark) {

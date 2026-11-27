@@ -46,6 +46,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.angelomarzocchi.glass.GlassBackdrop
 import io.github.angelomarzocchi.glass.GlassMaterial
+import io.github.angelomarzocchi.glass.GlassQuality
+import io.github.angelomarzocchi.glass.LocalGlassQuality
+import androidx.compose.runtime.CompositionLocalProvider
 import io.github.angelomarzocchi.glass.GlassSurface
 import io.github.angelomarzocchi.glass.rememberGlassBackdrop
 import io.github.angelomarzocchi.lumen.FloatingNavBar
@@ -62,6 +65,9 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
  * - 5: compose-lumen's navigation bar in liquid glass, a finger held on a tab, light; 6: the same, dark.
  *
  * `adb shell am start -n io.github.angelomarzocchi.glass.demo/.GalleryActivity --ei shot 0`
+ *
+ * `--es quality Frosted` (or `Tinted`, `Full`) draws the glass at that quality, as a device that cannot
+ * draw it in full would.
  */
 class GalleryActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,9 +75,10 @@ class GalleryActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val shot = intent.getIntExtra("shot", 0)
         val dark = shot in setOf(1, 2, 3, 6)
+        val quality = intent.getStringExtra("quality")?.let { GlassQuality.valueOf(it) }
         setContent {
             MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
-                Gallery(shot, dark)
+                CompositionLocalProvider(LocalGlassQuality provides quality) { Gallery(shot, dark) }
             }
         }
     }

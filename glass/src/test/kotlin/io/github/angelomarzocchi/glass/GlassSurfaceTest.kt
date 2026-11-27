@@ -7,9 +7,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.center
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -129,5 +132,42 @@ class GlassSurfaceTest {
             effect = painter.inkEffect(density, GlassMaterial.clear(false), Rect(0f, 0f, 10f, 10f), 5f)
         }
         rule.runOnIdle { assertNull(effect) }
+    }
+
+    @Test
+    fun theDeviceDrawsWhatItsAndroidVersionAllows() {
+        var quality: GlassQuality? = null
+        rule.setContent { quality = rememberGlassQuality() }
+        val expected = if (Build.VERSION.SDK_INT >= 31) GlassQuality.Frosted else GlassQuality.Tinted
+        rule.runOnIdle { assertEquals(expected, quality) }
+    }
+
+    @Test
+    fun liquidGlassDrawsPlainWithItsLightsOnAndTinted() {
+        // Every path of the plain glass at once: frosted or tinted, a shadow, a selection, the lamp, the
+        // edge's line, the marks lit flat — and asked for less than the device can draw.
+        var asked by androidx.compose.runtime.mutableStateOf<GlassQuality?>(null)
+        rule.setContent {
+                androidx.compose.runtime.CompositionLocalProvider(LocalGlassQuality provides asked) {
+                    val backdrop = rememberGlassBackdrop()
+                    Box(Modifier.fillMaxSize()) {
+                        Box(Modifier.fillMaxSize().glassBackdrop(backdrop).background(Color.Cyan))
+                        GlassSurface(
+                            backdrop = backdrop,
+                            material = GlassMaterial.liquid(dark = true, finish = 0.3f),
+                            modifier = Modifier.align(Alignment.Center).size(240.dp, 64.dp).testTag("glass"),
+                            lighting = { size ->
+                                selection = Rect(4f, 4f, size.width / 3f, size.height - 4f)
+                                selectionOn = 1f
+                                lamp = size.center
+                                lampOn = 1f
+                            },
+                        ) { BasicText("Lit", Modifier.align(Alignment.Center)) }
+                    }
+                }
+        }
+        rule.onNodeWithText("Lit").assertExists()
+        asked = GlassQuality.Tinted
+        rule.onNodeWithText("Lit").assertExists()
     }
 }

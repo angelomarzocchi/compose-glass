@@ -101,7 +101,15 @@ both libraries) maps `IslandLights` → `GlassLighting` (lamp, selection as a li
 - `glassShaderError()` returns null when full glass is drawn, otherwise the reason (API level, or the
   AGSL compiler's message). Show it in a debug screen rather than guessing.
 - Android Studio's preview has no AGSL: glass is plain there. Judge it on a device with API 33+.
-- Below API 33 `inkEffect` is null and lights are drawn flat; layouts and touches are identical.
+- Quality: `GlassQuality.Full` (API 33), `Frosted` (API 31, blur only), `Tinted` (any API, no
+  off-screen pass). Each device picks its own (`rememberGlassQuality()`): Android Go / low memory →
+  `Tinted`, under ~3 GB → `Frosted`, battery saver → at most `Frosted`. Override with
+  `CompositionLocalProvider(LocalGlassQuality provides GlassQuality.Frosted)`; never more than the API
+  allows. Do not write your own API-level checks around glass.
+- Below `Full`, `inkEffect` is null: `GlassSurface` then colours its marks in the lights by itself; a
+  custom `GlassPainter` surface (or compose-lumen's island) keeps its marks' own colours. Layouts and
+  touches are identical at every quality.
+- To see a lower quality on a recent phone, provide it through `LocalGlassQuality`.
 
 ## Performance
 

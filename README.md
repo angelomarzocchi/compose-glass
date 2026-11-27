@@ -31,9 +31,10 @@ Liquid glass, drawn with two AGSL programs, from all but clear to matte along on
 <sub>Captured on an Android 15 emulator from `demo/`'s `GalleryActivity` (`--ei shot 0…6`). The app under the
 glass is an ordinary travel feed whose photos are painted in code.</sub>
 
-Full glass needs Android 13 (API 33, AGSL). Below that a surface falls back to frosted (API 31–32,
-`RenderEffect` blur) or tinted (24–30) glass with flat lights — it never crashes, and
-`glassShaderError()` tells you why.
+Full glass needs Android 13 (API 33, AGSL). Below that — and on phones that would struggle with it — a
+surface is drawn at a lower [quality](#quality-and-older-devices): frosted (API 31+) or tinted (any API),
+still liquid glass to look at, with its line of light, its shadow and its lights. It never crashes, and
+`glassShaderError()` tells you why the programs are not used.
 
 ## Install
 
@@ -247,6 +248,31 @@ went from about 60% to about 40%.
 
 Keep glass to the few surfaces that float (a bar, a FAB, an island, a panel); do not tile a list with
 it. The tilt sensor is only listened to while the screen is resumed, and only if you ask for it.
+
+## Quality and older devices
+
+Every surface is drawn at a `GlassQuality`. Each looks like the same glass — shape, tint, line of light
+along the edge, shadow, the lights inside, the marks taking their colours — and lays out and takes
+touches the same; what goes is what costs.
+
+| | What is drawn | Needs |
+|---|---|---|
+| `Full` | Everything: the page bent at the rim, split into its colours, the engraving lit from inside. | API 33 |
+| `Frosted` | The page frosted and a little richer in colour, under more of the body's tint. No bend, no program: one blur. | API 31 |
+| `Tinted` | A tint all but opaque. Nothing drawn off-screen. | any |
+
+By default each device draws all its Android version allows, except that an Android Go or low-memory
+device is `Tinted`, a phone with less than about 3 GB of memory is `Frosted`, and with battery saver on
+glass is at most `Frosted` (it comes back when battery saver goes off). Ask for a quality yourself, and a
+device is never asked for more than it can draw:
+
+```kotlin
+CompositionLocalProvider(LocalGlassQuality provides GlassQuality.Frosted) { App() }
+
+val quality = rememberGlassQuality()   // what is drawn here
+```
+
+The demo's lab has the qualities on chips, and the gallery takes `--es quality Frosted` (or `Tinted`).
 
 ## Demo
 
