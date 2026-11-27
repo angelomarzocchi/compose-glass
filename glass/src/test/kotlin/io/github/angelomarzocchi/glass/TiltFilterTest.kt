@@ -71,4 +71,51 @@ class TiltFilterTest {
     fun atRestTheLightIsTheDefault() {
         assertEquals(DefaultKeyLight, keyLightFor(0f, 0f))
     }
+
+    /** Ten seconds at 50 samples a second of a phone held at [pitch], [roll], trembling as a hand does. */
+    private fun heldInHand(pitch: Float, roll: Float, seconds: Int = 10): List<Pair<Float, Float>> {
+        val random = java.util.Random(7)
+        return List(seconds * 50) { i ->
+            val t = i / 50f
+            // A physiological tremor of a few tenths of a degree at 8 to 12 Hz, and a little noise.
+            val shake = 0.3f * kotlin.math.sin(2f * Math.PI.toFloat() * 9f * t) + 0.1f * random.nextGaussian().toFloat()
+            val sway = 0.2f * kotlin.math.sin(2f * Math.PI.toFloat() * 11f * t) + 0.1f * random.nextGaussian().toFloat()
+            pitch + shake to roll + sway
+        }
+    }
+
+    private fun writesHeldStill(gate: TiltGate): Int {
+        val filter = TiltFilter()
+        var writes = 0
+        heldInHand(pitch = -35f, roll = 4f).forEach { (pitch, roll) ->
+            filter.update(pitch, roll)
+            if (gate.pass(filter.rotationX, filter.rotationY)) writes++
+        }
+        return writes
+    }
+
+    @Test
+    fun aHandHoldingThePhoneStillDoesNotKeepTheGlassRedrawing() {
+        // Fifty a second would be 500: a tremor smoothed is well inside the dead band.
+        val writes = writesHeldStill(TiltGate())
+        assertTrue("writes while held still: $writes", writes <= 2)
+        // Where a fiftieth of a degree got through, it was most of them.
+        val before = writesHeldStill(TiltGate(deadBand = 0.02f))
+        assertTrue("writes with the old dead band: $before", before > 100)
+    }
+
+    @Test
+    fun aTurnOfTheWristStillGetsThrough() {
+        val filter = TiltFilter()
+        val gate = TiltGate()
+        var writes = 0
+        heldInHand(pitch = -35f, roll = 0f, seconds = 1).forEach { (p, r) -> filter.update(p, r); gate.pass(filter.rotationX, filter.rotationY) }
+        // Half a second rolling 4 degrees to the right.
+        repeat(25) { i ->
+            filter.update(-35f, 4f * (i + 1) / 25f)
+            if (gate.pass(filter.rotationX, filter.rotationY)) writes++
+        }
+        assertTrue("writes while turning: $writes", writes >= 5)
+        assertTrue("the light went right: ${gate.y}", gate.y > 1f)
+    }
 }

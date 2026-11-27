@@ -211,6 +211,26 @@ changes. The page under the glass changes whenever the page does, and takes the 
 it; a light that moves — the room's, the lamp, a selection — costs one pass of a program, nothing under
 it; a frame where nothing changed costs nothing.
 
+What a surface does not need it does not draw:
+
+- **An engraving with no light on it is not drawn off-screen.** Liquid glass bends nothing in its flat
+  middle, where labels sit, so until a finger or a selection lights it, what the surface holds is drawn
+  as it is; the program comes in with the light.
+- **A frosted page is frosted at half its size** (from 4 dp of frost): a quarter of the pixels to blur,
+  and no difference to see.
+- **The programs are compiled once for the app**, not once a surface. The first compile in a process can
+  take over a hundred milliseconds: call `prepareGlass()` off the main thread at start to keep it off the
+  first frame.
+
+  ```kotlin
+  lifecycleScope.launch(Dispatchers.Default) { prepareGlass() }
+  ```
+- **The phone in hand does not keep glass redrawing.** `rememberTiltKeyLight` lets a turn through only
+  once it is a quarter of a degree: a hand's tremor stays inside that.
+
+In the demo's lab (three surfaces over a scrolling page, on an emulator) these took the median frame
+while scrolling from about 55 ms to about 30 ms — the page without its glass takes about 28 ms there.
+
 Over a page that keeps changing (a video, a camera) every surface is drawn again every frame. Glass that
 floats over a part of it that hardly changes — a bar over a blurred background — can look at a still of
 the page instead, taken a few times a second:
@@ -226,7 +246,7 @@ viewfinder with eight surfaces, six of them over a blurred background, the GPU's
 went from about 60% to about 40%.
 
 Keep glass to the few surfaces that float (a bar, a FAB, an island, a panel); do not tile a list with
-it. The tilt sensor is only listened to while the screen is resumed.
+it. The tilt sensor is only listened to while the screen is resumed, and only if you ask for it.
 
 ## Demo
 

@@ -97,11 +97,18 @@ half4 main(float2 fc) {
     float band = u * u;
 
     float2 shift = -g * refraction * pow(u, max(falloff, 1.0));
-    float3 col = float3(
-        content.eval(fc + shift * (1.0 + dispersion)).r,
-        content.eval(fc + shift).g,
-        content.eval(fc + shift * (1.0 - dispersion)).b
-    );
+    // The colours split only where the rim bends the page: the flat middle, the most of a surface, is
+    // read once rather than three times.
+    float3 col;
+    if (u > 0.0 && dispersion > 0.0) {
+        col = float3(
+            content.eval(fc + shift * (1.0 + dispersion)).r,
+            content.eval(fc + shift).g,
+            content.eval(fc + shift * (1.0 - dispersion)).b
+        );
+    } else {
+        col = content.eval(fc + shift).rgb;
+    }
     // Richer colour through the glass, as liquid glass shows the page: the body's tint would otherwise
     // wash it out towards grey.
     float luma = dot(col, float3(0.2126, 0.7152, 0.0722));
@@ -132,11 +139,14 @@ half4 main(float2 fc) {
     float s = -d;
     float lw = max(lineWidth, 1.0);
     float line = 0.0;
-    for (int i = 0; i < 4; i++) {
-        float t = s + (float(i) - 1.5) * 0.25;
-        line += t < 0.0 ? 0.0 : 1.0 - smoothstep(lw * 0.5, lw * 1.4, t);
+    // Only near the edge: further in, every sample of the line is 0.
+    if (s < lw * 1.4 + 0.5) {
+        for (int i = 0; i < 4; i++) {
+            float t = s + (float(i) - 1.5) * 0.25;
+            line += t < 0.0 ? 0.0 : 1.0 - smoothstep(lw * 0.5, lw * 1.4, t);
+        }
+        line *= 0.25;
     }
-    line *= 0.25;
     // Gathered ([hairline].z above 1) the line glints where the edge faces the light and where it faces
     // away, and runs faint between.
     float sideOn = mix(hairline.y, hairline.x, facing * 0.5 + 0.5) * (0.3 + 0.7 * pow(abs(facing), max(hairline.z, 0.1)));
@@ -228,20 +238,23 @@ half4 main(float2 fc) {
     float ds = box(fc - sc, sb, min(sb.x, sb.y));
     float selLit = selOn * (1.0 - smoothstep(-3.0, 3.0, ds));
 
-    float halo = 0.0;
-    for (int i = 0; i < 8; i++) {
-        float t = float(i) * 0.7853982;
-        halo += float(content.eval(fc + float2(cos(t), sin(t)) * glow).a);
-    }
-    halo *= 0.125;
-
     float3 base = ink.a > 0.001 ? ink.rgb / ink.a : float3(0.0);
     float3 colour = mix(base, lampInk, lampLit * (1.0 - selLit));
     colour = mix(colour, selInk, selLit);
     float3 rgb = colour * ink.a;
     float alpha = ink.a;
 
+    // The glow round a lit mark: eight reads of what is engraved, only where a light is on. Unlit — most
+    // of the surface, most of the time — the engraving costs one read.
     float shine = clamp(selLit * 0.45 + lampLit * 0.5, 0.0, 1.0);
+    float halo = 0.0;
+    if (shine > 0.002 && alpha < 0.999) {
+        for (int i = 0; i < 8; i++) {
+            float t = float(i) * 0.7853982;
+            halo += float(content.eval(fc + float2(cos(t), sin(t)) * glow).a);
+        }
+        halo *= 0.125;
+    }
     float glowA = halo * shine * (1.0 - alpha);
     float3 glowColour = mix(selInk, mix(lampInk, lampColor, 0.5), lampLit / max(selLit + lampLit, 0.001));
     rgb += glowColour * glowA;

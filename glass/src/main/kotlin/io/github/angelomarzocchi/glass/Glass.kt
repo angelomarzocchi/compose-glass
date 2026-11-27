@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
@@ -230,7 +232,9 @@ public data class GlassMaterial(
             edge = 0f,
             rim = 0f,
             specular = 0f,
-            inkDepth = 0.08f,
+            // Labels sit in the flat middle, where liquid glass bends nothing: no bend, and an unlit
+            // engraving then costs nothing (see inkEffect).
+            inkDepth = 0f,
             inkReflection = 0f,
             inkGlow = 3.dp,
             lampReach = 44.dp,
@@ -251,7 +255,6 @@ public data class GlassMaterial(
             frost = 20.dp,
             tint = if (dark) Color(0xFF1A1A1F) else Color(0xFFF7F7FA),
             tintAmount = if (dark) 0.62f else 0.55f,
-            inkDepth = 0.03f,
             hairline = if (dark) 0.4f else 0.5f,
             farHairline = 0.2f,
             hairlineFocus = 1.5f,
@@ -390,6 +393,11 @@ public class GlassPainter internal constructor(private val layer: GraphicsLayer,
     ): androidx.compose.ui.graphics.RenderEffect? {
         val programs = programs
         if (Build.VERSION.SDK_INT < 33 || programs !is GlassPrograms) return null
+        // An engraving that nothing bends, mirrors or lights looks the same without its program: no effect,
+        // and the layer that holds it is not drawn off-screen first. A light coming on brings it back.
+        val lit = lighting.lampOn > 0f || (lighting.selectionOn > 0f && lighting.selection.width > 0f && lighting.selection.height > 0f)
+        val bend = with(density) { material.refraction.toPx() } * material.inkDepth
+        if (!lit && material.inkReflection <= 0f && kotlin.math.abs(bend) < 0.5f) return null
         return programs.ink(density, material, lighting, shape, radius)
     }
 
@@ -412,10 +420,22 @@ public fun rememberGlassPainter(): GlassPainter {
 public fun Modifier.glassPosition(painter: GlassPainter): Modifier =
     onGloballyPositioned { painter.origin = it.positionInRoot() }
 
+/**
+ * The two programs, compiled once for the whole app: compiling them takes a few milliseconds each time,
+ * and the first time in a process a good deal more. Every surface sets its own numbers on the same
+ * shader and makes its effect from them at once, on the main thread; an effect keeps the numbers it was
+ * made with, whatever the shader is given after.
+ */
+@RequiresApi(33)
+private object SharedPrograms {
+    val body: RuntimeShader by lazy { RuntimeShader(GlassBodyShader) }
+    val ink: RuntimeShader by lazy { RuntimeShader(GlassInkShader) }
+}
+
 @RequiresApi(33)
 private class GlassPrograms {
-    val body = Program(GlassBodyShader)
-    val ink = Program(GlassInkShader)
+    val body = Program(SharedPrograms.body)
+    val ink = Program(SharedPrograms.ink)
 
     // A frame where nothing about the glass changed draws nothing new. The page under it is recorded once
     // for where the glass is — what the page shows reaches it by itself — and frosted in a layer of its
@@ -425,6 +445,7 @@ private class GlassPrograms {
     private var pageSize = IntSize.Zero
     private var pageAt = Offset.Unspecified
     private var pageSource: GraphicsLayer? = null
+    private var pageScale = 0f
     private var frostRadius = -1f
     private var frostEffect: androidx.compose.ui.graphics.RenderEffect? = null
     private var bodySize = IntSize.Zero
@@ -449,18 +470,27 @@ private class GlassPrograms {
         val shadowSpread = if (shadow > 0f) ShadowSpread.toPx() else 0f
         val shadowDrop = if (shadow > 0f) ShadowDrop.toPx() else 0f
         // Room round the shape for what the rim bends in from outside it, for the blur to read, and for
-        // the glass's shadow.
-        val room = ceil(max(max(-bend, 0f) * (1f + material.dispersion) + frost * 3f, shadowSpread + shadowDrop) + overhang + 2f)
+        // the glass's shadow. A blur of radius r reads about 1.7 r away (its sigma is 0.58 r + 0.5, and
+        // it reads three sigmas): 2 r is enough, and every pixel of room is blurred and run through the
+        // body's program.
+        val room = ceil(max(max(-bend, 0f) * (1f + material.dispersion) + frost * 2f, shadowSpread + shadowDrop) + overhang + 2f)
         val size = IntSize(ceil(size.width + 2 * room).toInt(), ceil(size.height + 2 * room).toInt())
 
+        // A page frosted enough is frosted at half its size, and drawn back at its own: a quarter of the
+        // pixels to draw and blur, and a blur that wide shows no difference.
+        val reduce = if (frost >= HalfSizeFrost.toPx()) 0.5f else 1f
         if (frost != frostRadius) {
             frostRadius = frost
-            frostEffect = if (frost > 0.5f) RenderEffect.createBlurEffect(frost, frost, Shader.TileMode.CLAMP).asComposeRenderEffect() else null
+            val radius = frost * reduce
+            frostEffect = if (radius > 0.5f) RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP).asComposeRenderEffect() else null
         }
         page.renderEffect = frostEffect
         val at = origin - backdrop.origin
-        if (size != pageSize || at != pageAt || backdrop.layer !== pageSource) {
-            page.record(size) { translate(room - at.x, room - at.y) { drawLayer(backdrop.layer) } }
+        if (size != pageSize || at != pageAt || backdrop.layer !== pageSource || reduce != pageScale) {
+            val reduced = IntSize(ceil(size.width * reduce).toInt(), ceil(size.height * reduce).toInt())
+            page.record(reduced) {
+                scale(reduce, reduce, pivot = Offset.Zero) { translate(room - at.x, room - at.y) { drawLayer(backdrop.layer) } }
+            }
             pageSize = size
             pageAt = at
             pageSource = backdrop.layer
@@ -490,9 +520,10 @@ private class GlassPrograms {
         body.set("rimGlow", material.rimGlow)
         body.set("shadow", shadow, shadowSpread, shadowDrop)
         layer.renderEffect = body.effect()
-        if (size != bodySize) {
-            layer.record(size) { drawLayer(page) }
+        if (size != bodySize || reduce != pageScale) {
+            layer.record(size) { scale(1f / reduce, 1f / reduce, pivot = Offset.Zero) { drawLayer(page) } }
             bodySize = size
+            pageScale = reduce
         }
         translate(-room, -room) { drawLayer(layer) }
     }
@@ -522,13 +553,15 @@ private class GlassPrograms {
 }
 
 /**
- * An AGSL program run as a render effect, and the numbers it was last given: [effect] is a new effect
- * only when one of them changed since the last ([begin], the [set]s, then [effect]). A layer handed the
- * same effect is not drawn again.
+ * An AGSL program run as a render effect for one surface, and the numbers that surface last gave it:
+ * [effect] is a new effect only when one of them changed since the last ([begin], the [set]s, then
+ * [effect]). A layer handed the same effect is not drawn again.
+ *
+ * The [shader] is shared by every surface ([SharedPrograms]): all the numbers are set again before every
+ * [effect], and an effect is made from them straight away.
  */
 @RequiresApi(33)
-private class Program(sksl: String) {
-    private val shader = RuntimeShader(sksl)
+private class Program(private val shader: RuntimeShader) {
     private val last = FloatArray(MaxValues)
     private var count = 0
     private var changed = true
@@ -641,6 +674,9 @@ private fun DrawScope.drawPlainGlass(
 /** How high over the glass the room's light is, against its 1 of reach across the screen. */
 private const val KeyLightHeight = 0.9f
 
+/** From how much frost on the page under the glass is blurred at half its size. */
+private val HalfSizeFrost = 4.dp
+
 /** How far the glass's shadow spreads round it, and how far down it falls. */
 private val ShadowSpread = 14.dp
 private val ShadowDrop = 4.dp
@@ -652,6 +688,20 @@ private val ShadowDrop = 4.dp
 public fun glassShaderError(): String? {
     if (Build.VERSION.SDK_INT < 33) return "API ${Build.VERSION.SDK_INT}: full glass needs Android 13 (API 33)"
     return runCatching { GlassPrograms() }.exceptionOrNull()?.let { it.message ?: it.toString() }
+}
+
+/**
+ * Compiles glass's programs now, on the calling thread, instead of on the main thread when the first
+ * surface is drawn: the first compile in a process can take more than a hundred milliseconds. Call it off
+ * the main thread early on, at app start: `scope.launch(Dispatchers.Default) { prepareGlass() }`. Safe to
+ * call more than once, and from any thread; does nothing below API 33 or where AGSL does not compile.
+ */
+public fun prepareGlass() {
+    if (Build.VERSION.SDK_INT < 33) return
+    runCatching {
+        SharedPrograms.body
+        SharedPrograms.ink
+    }
 }
 
 /**
@@ -682,6 +732,9 @@ public fun GlassSurface(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val painter = rememberGlassPainter()
+    // What is engraved stays inside the glass, lit or not: the engraving's program cuts it to the shape,
+    // and the layer's clip does when there is no program to run.
+    val outline = remember(cornerRadius) { if (cornerRadius == null) RoundedCornerShape(percent = 50) else RoundedCornerShape(cornerRadius) }
     val ink = when {
         lampInk.isSpecified() -> lampInk
         dark -> Color.White
@@ -708,6 +761,8 @@ public fun GlassSurface(
                 val radius = cornerRadius?.toPx() ?: (size.minDimension / 2f)
                 painter.light { all(size) }
                 renderEffect = painter.inkEffect(this, material, Rect(Offset.Zero, size), radius)
+                shape = outline
+                clip = true
             },
         content = content,
     )

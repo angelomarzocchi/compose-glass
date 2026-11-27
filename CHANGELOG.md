@@ -12,6 +12,16 @@
 - `lerp(start, stop, fraction)` between two glasses.
 - New fields in the `GlassMaterial` data class change its constructor and `copy()` signatures: rebuild
   against this version.
+- Faster: an engraving with no light on it is not drawn off-screen (liquid glass bends no labels:
+  `inkDepth` 0), a page frosted by 4 dp or more is frosted at half its size, the body reads the page once
+  where the rim does not split its colours, and the glow round a lit mark is only worked out where a
+  light is on. In the demo's lab the median frame while scrolling went from about 55 ms to about 30 ms on
+  an emulator, the page alone taking about 28 ms.
+- The two AGSL programs are compiled once for the app instead of once a surface (about 4 ms each time on
+  an emulator), and `prepareGlass()` compiles them ahead, off the main thread.
+- `rememberTiltKeyLight` lets a turn through only past a quarter of a degree: a hand holding the phone
+  still no longer redraws every glass fifty times a second.
+- `GlassSurface` clips what it holds to its shape, lit or not.
 - Demo: the lab opens on liquid glass with a finish slider, the room's light off; the gallery shows the
   finish from 0 to 1 and compose-lumen's bar in glass (`--ei shot 5`, `6`).
 

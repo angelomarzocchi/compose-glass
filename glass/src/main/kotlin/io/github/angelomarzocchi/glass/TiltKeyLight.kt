@@ -43,6 +43,7 @@ public fun rememberTiltKeyLight(enabled: Boolean = true): () -> Offset {
             return@DisposableEffect onDispose { }
         }
         val filter = TiltFilter()
+        val gate = TiltGate()
         val matrix = FloatArray(9)
         val angles = FloatArray(3)
         val listener = object : SensorEventListener {
@@ -54,8 +55,10 @@ public fun rememberTiltKeyLight(enabled: Boolean = true): () -> Offset {
                     rollDegrees = Math.toDegrees(angles[2].toDouble()).toFloat(),
                 )
                 // Only a change the eye could see is written: every write redraws the glass.
-                if (kotlin.math.abs(filter.rotationX - tilt.x) > DeadBand) tilt.x = filter.rotationX
-                if (kotlin.math.abs(filter.rotationY - tilt.y) > DeadBand) tilt.y = filter.rotationY
+                if (gate.pass(filter.rotationX, filter.rotationY)) {
+                    tilt.x = gate.x
+                    tilt.y = gate.y
+                }
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -64,6 +67,7 @@ public fun rememberTiltKeyLight(enabled: Boolean = true): () -> Offset {
         fun stop() {
             sensors.unregisterListener(listener)
             filter.reset()
+            gate.reset()
             tilt.x = 0f
             tilt.y = 0f
         }
@@ -148,4 +152,36 @@ internal class TiltFilter(
     }
 }
 
-private const val DeadBand = 0.02f
+/**
+ * Lets a tilt through only once it has moved far enough from the last one let through to be seen. A
+ * hand holding the phone still trembles by a few tenths of a degree, which the filter smooths to a few
+ * hundredths but never to nothing: let through, every sample would redraw every glass on screen, fifty
+ * times a second, for as long as the phone is in hand.
+ */
+internal class TiltGate(private val deadBand: Float = DeadBandDegrees) {
+    var x = 0f
+        private set
+    var y = 0f
+        private set
+
+    /** Whether [rotationX], [rotationY] differ from the tilt last let through by more than the dead band. */
+    fun pass(rotationX: Float, rotationY: Float): Boolean {
+        if (kotlin.math.abs(rotationX - x) <= deadBand && kotlin.math.abs(rotationY - y) <= deadBand) return false
+        x = rotationX
+        y = rotationY
+        return true
+    }
+
+    fun reset() {
+        x = 0f
+        y = 0f
+    }
+
+    companion object {
+        /**
+         * A quarter of a degree: the key light moves by about 3% of its reach at the most, which no glint
+         * shows, while a hand's tremor, smoothed, stays well inside it.
+         */
+        const val DeadBandDegrees = 0.25f
+    }
+}

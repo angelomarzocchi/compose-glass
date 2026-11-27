@@ -82,6 +82,7 @@ import io.github.angelomarzocchi.glass.GlassSurface
 import io.github.angelomarzocchi.glass.glassBackdrop
 import io.github.angelomarzocchi.glass.glassLampFollowsFinger
 import io.github.angelomarzocchi.glass.glassShaderError
+import io.github.angelomarzocchi.glass.prepareGlass
 import io.github.angelomarzocchi.glass.rememberGlassBackdrop
 import io.github.angelomarzocchi.glass.rememberGlassLamp
 import io.github.angelomarzocchi.glass.rememberTiltKeyLight
@@ -101,6 +102,8 @@ import kotlinx.coroutines.launch
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The glass's programs compile off the main thread while the activity comes up.
+        Thread(::prepareGlass, "glass-prepare").start()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent { GlassLab() }

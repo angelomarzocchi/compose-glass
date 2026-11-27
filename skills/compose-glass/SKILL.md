@@ -110,8 +110,14 @@ program pass when a light moves. Over a page that changes every frame (video, ca
 drawn again every frame: for glass over a part of it that hardly changes (a bar over a blurred
 background), pass `rememberStillGlassBackdrop(backdrop)` instead of `backdrop` — a still of the page
 taken every 250 ms at half size, free between stills. Keep the live backdrop for glass over the moving
-image itself. Use glass for a handful of floating surfaces, not for list items. `frost` adds blur passes:
-keep it modest on large panels.
+image itself. Use glass for a handful of floating surfaces, not for list items. `frost` adds blur passes
+(halved in size from 4 dp): keep it modest on large panels.
+
+- Call `prepareGlass()` once, off the main thread, at app start (`Dispatchers.Default`): the first AGSL
+  compile in a process can take 100 ms or more and would otherwise land on the first frame with glass.
+- An unlit surface on liquid glass draws what it holds without an off-screen pass. Keep `inkDepth` at 0
+  and `inkReflection` at 0 unless asked: either brings the engraving's pass back on every frame.
+- `rememberTiltKeyLight()` costs a sensor and redraws on every visible turn: only when asked for.
 
 ## Troubleshooting
 
