@@ -2,29 +2,33 @@
 
 **A glass material for Jetpack Compose, with light that lives inside it.**
 
-Not a blur of the page, and not a lens. Glass is a slab with a rounded rim, drawn with two AGSL
-programs:
+Liquid glass, drawn with two AGSL programs, from all but clear to matte along one finish:
 
-- **The page bends at the rim.** What is under the glass is refracted only where the rim falls away, so
-  the edge magnifies, with a touch of chromatic dispersion.
-- **The rim has depth.** Seen through at the rim the slab is thickest: denser, a shade darker, and the
-  room's light catches it on one side and leaves the other in shade — a highlight and a hairline that
-  move as the phone turns (`rememberTiltKeyLight`).
+- **The page bends at the rim.** What is under the glass is refracted where the rim falls away, so
+  the edge magnifies, with a touch of chromatic dispersion; through the glass it is a little richer in
+  colour, never washed out to grey.
+- **The edge catches the light.** A fine line of light runs round it, glinting where the room's light
+  meets it and on the far side, with a faint glow just inside it and a soft shadow under the glass. No
+  bevel, no side in shade. The glints can follow the phone turning (`rememberTiltKeyLight`), if you ask.
 - **Content is engraved.** Icons and labels sit *inside* the slab: they bend at the rim too, a little
   less, and the polished rim can mirror them.
 - **Light lives inside.** The finger is a lamp put down on the glass — its light spreads through the body
   and runs out to the rim. A selection is a light left on inside, the shape of its plate, which the rim
   catches as it passes. Engraved marks light up as the light reaches them.
 
-| From liquid to frosted | The same, dark | Light inside the glass |
+| From liquid to matte | The same, dark | Light inside the glass |
 |:---:|:---:|:---:|
-| <img src="docs/media/glass-spectrum-light.jpg" width="250" alt="Five glass capsules over a travel feed, from liquid glass to milky frosted glass"> | <img src="docs/media/glass-spectrum-dark.jpg" width="250" alt="The same five materials over a night city and an aurora"> | <img src="docs/media/glass-lights.jpg" width="250" alt="Dark glass lit from none to full: a finger's lamp, a selection, both, and full"> |
+| <img src="docs/media/glass-spectrum-light.jpg" width="250" alt="Five glass capsules over a travel feed, their finish from liquid to matte"> | <img src="docs/media/glass-spectrum-dark.jpg" width="250" alt="The same five materials over a night city and an aurora"> | <img src="docs/media/glass-lights.jpg" width="250" alt="Dark glass lit from none to full: a finger's lamp, a selection, both, and full"> |
 
 | Glass in place | Glass in place, dark |
 |:---:|:---:|
 | <img src="docs/media/glass-in-context-light.jpg" width="250" alt="An island, a frosted panel, a half-lit FAB and a tab bar in glass over a travel app"> | <img src="docs/media/glass-in-context-dark.jpg" width="250" alt="The same pieces in dark glass over a night city"> |
 
-<sub>Captured on an Android 16 emulator from `demo/`'s `GalleryActivity` (`--ei shot 0…4`). The app under the
+| compose-lumen's bar in glass | The same, dark |
+|:---:|:---:|
+| <img src="docs/media/glass-lumen-light.jpg" width="250" alt="compose-lumen's floating navigation bar in liquid glass, a finger held on a tab"> | <img src="docs/media/glass-lumen-dark.jpg" width="250" alt="The same bar in dark liquid glass, the finger's light inside it"> |
+
+<sub>Captured on an Android 15 emulator from `demo/`'s `GalleryActivity` (`--ei shot 0…6`). The app under the
 glass is an ordinary travel feed whose photos are painted in code.</sub>
 
 Full glass needs Android 13 (API 33, AGSL). Below that a surface falls back to frosted (API 31–32,
@@ -70,7 +74,7 @@ Box(Modifier.fillMaxSize()) {
     val lamp = rememberGlassLamp()
     GlassSurface(
         backdrop = backdrop,
-        material = GlassMaterial.clear(dark),
+        material = GlassMaterial.liquid(dark, finish = 0.3f),
         modifier = Modifier
             .align(Alignment.BottomCenter)
             .padding(16.dp)
@@ -88,15 +92,26 @@ Box(Modifier.fillMaxSize()) {
 
 | | |
 |---|---|
-| `GlassMaterial.clear(dark)` | Lit acrylic: a thin rim that bends the page only in its last few dp, depth shown by thickness and light. The default. |
+| `GlassMaterial.liquid(dark, finish)` | **The default.** Liquid glass: the page bends across a wide, soft rim and shows through richer in colour; a fine line of light round the edge, a soft shadow under it. `finish` runs from 0, the clear lens, to 1, matte. About 0.3 suits a bar over a busy page. |
+| `GlassMaterial.matte(dark)` | `liquid` at finish 1: frosted, full-bodied, for a panel or a sheet that holds a lot to read. |
+| `lerp(a, b, fraction)` | Any glass in between two: a bar that frosts as the page scrolls under it, a bubble turning into a sheet. |
+
+The acrylic look of earlier versions is still there, for whoever wants a slab with a bevel: a darker,
+denser rim, lit on one side and in shade on the other.
+
+| | |
+|---|---|
+| `GlassMaterial.clear(dark)` | Lit acrylic: a thin rim that bends the page only in its last few dp, depth shown by thickness and light. |
 | `GlassMaterial.lens(dark)` | A wide rim that bends the page across all of it, splits the colours and mirrors the labels. Loud. |
-| `GlassMaterial.frosted(dark)` | Clear glass, frosted and denser, for a panel or a sheet that holds a lot to read. |
-| `GlassMaterial.liquid(dark)` | A lens with almost no slab: the page bends across a wide, soft rim, but the rim is barely shaded — only a fine line of light along the edge, and a fainter one on the far side. Apple's liquid glass rather than acrylic. |
+| `GlassMaterial.frosted(dark)` | Clear acrylic, frosted and denser. |
 
 Every property is a field of the `GlassMaterial` data class — `copy()` it: rim width (`bevel`),
 `refraction`, `falloff`, `dispersion`, `frost`, `tint`/`tintAmount`, `edge`, `rim`, `specular`,
-`inkDepth`, `inkReflection`, `inkGlow`, `lampReach`, and the fine line of light along the edge (`hairline`,
-as bright as the `rim` unless set, `farHairline` for the far side, and `hairlineWidth`, 0.75 dp by default).
+`inkDepth`, `inkReflection`, `inkGlow`, `lampReach`, the fine line of light along the edge (`hairline`,
+as bright as the `rim` unless set, `farHairline` for the far side, `hairlineWidth`, and `hairlineFocus`,
+how much it gathers into glints), `saturation` (the page's colour through the glass), `rimGlow` (an even
+light just inside the edge) and `shadow`. `edge`, `rim` and `specular` are the acrylic slab's shading:
+liquid glass keeps them at 0.
 
 ### Lights
 
@@ -104,7 +119,7 @@ as bright as the `rim` unless set, `farHairline` for the far side, and `hairline
 read animated values there, not in composition.
 
 ```kotlin
-val roomLight = rememberTiltKeyLight()          // the room's light follows the phone turning
+val roomLight = rememberTiltKeyLight()          // optional: the glints follow the phone turning
 val at = remember { Animatable(0f) }            // where the selection is, in tabs
 
 GlassSurface(
@@ -185,7 +200,7 @@ fun rememberGlassIsland(backdrop: GlassBackdrop, material: GlassMaterial, keyLig
     return remember(backdrop, material, painter, keyLight) { GlassIsland(backdrop, material, painter, keyLight) }
 }
 
-// FloatingNavBar(items, selected, onSelect, material = rememberGlassIsland(backdrop, GlassMaterial.clear(dark), roomLight))
+// FloatingNavBar(items, selected, onSelect, material = rememberGlassIsland(backdrop, GlassMaterial.liquid(dark, finish = 0.3f)))
 ```
 
 ## Performance

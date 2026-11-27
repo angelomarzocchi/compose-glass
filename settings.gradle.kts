@@ -19,6 +19,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // compose-lumen, for the demo's navigation bar in glass only: the library does not depend on it.
+        maven("https://jitpack.io") {
+            content { includeGroup("com.github.angelomarzocchi") }
+        }
     }
 }
 

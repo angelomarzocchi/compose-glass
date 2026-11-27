@@ -124,6 +124,14 @@ public fun Modifier.glassBackdrop(backdrop: GlassBackdrop): Modifier = this
  * @param farHairline the same line on the far side, where the light that went into a clear slab catches
  *   the edge on its way out: liquid glass shows both.
  * @param hairlineWidth how wide that line is, inside the edge; it fades out over its inner part.
+ * @param hairlineFocus how much that line gathers where the edge faces the light, and where it faces
+ *   away: 1 spreads it evenly round; 2 or more makes it glint on those two sides and run faint between.
+ * @param saturation how rich the page's colours are through the glass: 1 as they are, more to keep a
+ *   tinted body from washing them out to grey. Liquid glass shows the page a little richer than it is.
+ * @param rimGlow an even light just inside the edge, the same all round: the slab's thickness shown
+ *   without a side of it in shade. 0 for none.
+ * @param shadow how dark the soft shadow the glass casts under itself is, 0 for none. It is drawn by the
+ *   glass, round its shape, and is clipped away where the surface's parent clips.
  */
 @Immutable
 public data class GlassMaterial(
@@ -144,6 +152,10 @@ public data class GlassMaterial(
     val hairline: Float = rim,
     val farHairline: Float = 0f,
     val hairlineWidth: Dp = 0.75.dp,
+    val hairlineFocus: Float = 1f,
+    val saturation: Float = 1f,
+    val rimGlow: Float = 0f,
+    val shadow: Float = 0f,
 ) {
     public companion object {
         /**
@@ -188,35 +200,106 @@ public data class GlassMaterial(
         )
 
         /**
-         * Liquid glass: a lens rather than a slab, with almost no slab to show. The page bends across a
-         * wide, soft rim — it magnifies as it nears the edge — but the rim is barely shaded: no darker
-         * band, no thick bevel, no highlight across it; only a fine line of light along the edge where
-         * the room's light catches it, and a fainter one on the far side. See-through, with frost
-         * enough to keep a label readable.
+         * Liquid glass, from all but clear to matte along one [finish], 0 to 1. The default for
+         * anything that floats: a bar, a FAB, an island, a panel.
+         *
+         * A lens rather than a slab, with no slab to show: the page bends across a wide, soft rim — it
+         * magnifies as it nears the edge — and is seen a little richer in colour; the rim is not shaded
+         * at all, no darker band, no bevel, no highlight across it. Only a fine line of light along the
+         * edge, glinting where the room's light meets it and on the far side, a faint glow just inside
+         * it, and a soft shadow under the glass.
+         *
+         * Towards [finish] 1 the glass frosts and fills with body — the page under it a blur of colour, a
+         * label over it readable on the busiest page — the bend at the rim settles and the line of light
+         * softens. 0 is the clear lens; about 0.3 suits a bar over a busy page; 1 is [matte].
          */
-        public fun liquid(dark: Boolean): GlassMaterial = GlassMaterial(
-            bevel = 16.dp,
-            refraction = 12.dp,
-            falloff = 2.4f,
-            dispersion = 0.02f,
-            frost = 3.dp,
-            tint = if (dark) Color(0xFF151518) else Color(0xFFF8F8FA),
-            tintAmount = if (dark) 0.44f else 0.32f,
-            edge = 0.06f,
-            rim = 0.14f,
-            specular = 0.05f,
-            inkDepth = 0.1f,
+        public fun liquid(dark: Boolean, finish: Float = 0f): GlassMaterial =
+            lerp(liquidEnd(dark), matteEnd(dark), finish.coerceIn(0f, 1f))
+
+        /** [liquid] glass at the matte end of its finish: frosted and full-bodied, for a panel or a sheet to read on. */
+        public fun matte(dark: Boolean): GlassMaterial = liquid(dark, finish = 1f)
+
+        private fun liquidEnd(dark: Boolean) = GlassMaterial(
+            bevel = 18.dp,
+            refraction = 14.dp,
+            falloff = 2.2f,
+            dispersion = 0.025f,
+            frost = 0.dp,
+            tint = if (dark) Color(0xFF0E0E12) else Color.White,
+            tintAmount = if (dark) 0.28f else 0.1f,
+            edge = 0f,
+            rim = 0f,
+            specular = 0f,
+            inkDepth = 0.08f,
             inkReflection = 0f,
             inkGlow = 3.dp,
             lampReach = 44.dp,
-            hairline = if (dark) 0.75f else 0.9f,
-            farHairline = 0.4f,
+            hairline = if (dark) 0.7f else 0.85f,
+            farHairline = 0.45f,
+            hairlineWidth = 1.dp,
+            hairlineFocus = 2.5f,
+            saturation = 1.5f,
+            rimGlow = if (dark) 0.12f else 0.18f,
+            shadow = if (dark) 0.3f else 0.12f,
+        )
+
+        private fun matteEnd(dark: Boolean) = liquidEnd(dark).copy(
+            bevel = 14.dp,
+            refraction = 3.dp,
+            falloff = 3f,
+            dispersion = 0f,
+            frost = 20.dp,
+            tint = if (dark) Color(0xFF1A1A1F) else Color(0xFFF7F7FA),
+            tintAmount = if (dark) 0.62f else 0.55f,
+            inkDepth = 0.03f,
+            hairline = if (dark) 0.4f else 0.5f,
+            farHairline = 0.2f,
+            hairlineFocus = 1.5f,
+            saturation = 1.15f,
+            rimGlow = 0.05f,
+            shadow = if (dark) 0.22f else 0.08f,
         )
 
         /** [clear] glass frosted, for a surface that holds a lot to read: a panel, a sheet. */
         public fun frosted(dark: Boolean): GlassMaterial =
             clear(dark).copy(frost = 14.dp, tintAmount = if (dark) 0.68f else 0.6f, bevel = 14.dp)
     }
+}
+
+/**
+ * The glass [fraction] of the way from [start] to [stop]: every property in between. For a glass that
+ * changes as something happens — a bar that frosts as the page scrolls under it, a bubble that turns
+ * into a sheet.
+ */
+public fun lerp(start: GlassMaterial, stop: GlassMaterial, fraction: Float): GlassMaterial {
+    // The ends exactly: a colour's lerp goes through another colour space and back.
+    if (fraction == 0f) return start
+    if (fraction == 1f) return stop
+    fun mix(a: Float, b: Float) = a + (b - a) * fraction
+    fun mix(a: Dp, b: Dp) = androidx.compose.ui.unit.lerp(a, b, fraction)
+    return GlassMaterial(
+        bevel = mix(start.bevel, stop.bevel),
+        refraction = mix(start.refraction, stop.refraction),
+        falloff = mix(start.falloff, stop.falloff),
+        dispersion = mix(start.dispersion, stop.dispersion),
+        frost = mix(start.frost, stop.frost),
+        tint = androidx.compose.ui.graphics.lerp(start.tint, stop.tint, fraction),
+        tintAmount = mix(start.tintAmount, stop.tintAmount),
+        edge = mix(start.edge, stop.edge),
+        rim = mix(start.rim, stop.rim),
+        specular = mix(start.specular, stop.specular),
+        inkDepth = mix(start.inkDepth, stop.inkDepth),
+        inkReflection = mix(start.inkReflection, stop.inkReflection),
+        inkGlow = mix(start.inkGlow, stop.inkGlow),
+        lampReach = mix(start.lampReach, stop.lampReach),
+        hairline = mix(start.hairline, stop.hairline),
+        farHairline = mix(start.farHairline, stop.farHairline),
+        hairlineWidth = mix(start.hairlineWidth, stop.hairlineWidth),
+        hairlineFocus = mix(start.hairlineFocus, stop.hairlineFocus),
+        saturation = mix(start.saturation, stop.saturation),
+        rimGlow = mix(start.rimGlow, stop.rimGlow),
+        shadow = mix(start.shadow, stop.shadow),
+    )
 }
 
 /**
@@ -362,8 +445,12 @@ private class GlassPrograms {
         backdrop.version
         val bend = material.refraction.toPx()
         val frost = material.frost.toPx()
-        // Room round the shape for what the rim bends in from outside it, and for the blur to read.
-        val room = ceil(max(-bend, 0f) * (1f + material.dispersion) + frost * 3f + overhang + 2f)
+        val shadow = material.shadow.coerceIn(0f, 1f)
+        val shadowSpread = if (shadow > 0f) ShadowSpread.toPx() else 0f
+        val shadowDrop = if (shadow > 0f) ShadowDrop.toPx() else 0f
+        // Room round the shape for what the rim bends in from outside it, for the blur to read, and for
+        // the glass's shadow.
+        val room = ceil(max(max(-bend, 0f) * (1f + material.dispersion) + frost * 3f, shadowSpread + shadowDrop) + overhang + 2f)
         val size = IntSize(ceil(size.width + 2 * room).toInt(), ceil(size.height + 2 * room).toInt())
 
         if (frost != frostRadius) {
@@ -391,7 +478,7 @@ private class GlassPrograms {
         body.set("edge", material.edge)
         body.set("rim", material.rim)
         body.set("specular", material.specular)
-        body.set("hairline", material.hairline, material.farHairline)
+        body.set("hairline", material.hairline, material.farHairline, material.hairlineFocus)
         body.set("lineWidth", material.hairlineWidth.toPx())
         body.set("keyLight", lighting.keyLight.x, lighting.keyLight.y, KeyLightHeight)
         body.set("lamp", lighting.lamp.x, lighting.lamp.y, lighting.lampOn, material.lampReach.toPx())
@@ -399,6 +486,9 @@ private class GlassPrograms {
         body.setSelection(lighting)
         body.set("selColor", lighting.selectionColor.red, lighting.selectionColor.green, lighting.selectionColor.blue)
         body.set("dark", if (dark) 1f else 0f)
+        body.set("saturation", material.saturation)
+        body.set("rimGlow", material.rimGlow)
+        body.set("shadow", shadow, shadowSpread, shadowDrop)
         layer.renderEffect = body.effect()
         if (size != bodySize) {
             layer.record(size) { drawLayer(page) }
@@ -550,6 +640,10 @@ private fun DrawScope.drawPlainGlass(
 
 /** How high over the glass the room's light is, against its 1 of reach across the screen. */
 private const val KeyLightHeight = 0.9f
+
+/** How far the glass's shadow spreads round it, and how far down it falls. */
+private val ShadowSpread = 14.dp
+private val ShadowDrop = 4.dp
 
 /**
  * Why glass is drawn plain on this device, or null when it is drawn in full: below API 33 there is no

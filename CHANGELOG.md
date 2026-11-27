@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Liquid glass is the glass.** `GlassMaterial.liquid(dark, finish)` runs from the clear lens (`finish`
+  0) to matte (1) along one knob, and `GlassMaterial.matte(dark)` is its far end. No bevel and no side in
+  shade: the page bends at a wide, soft rim and shows through richer in colour, a fine line of light runs
+  round the edge glinting where the light meets it, a faint glow sits just inside it, and the glass casts
+  a soft shadow of its own. `liquid(dark)` looks different from 0.2.0's: that one was a lightly shaded slab.
+- New `GlassMaterial` properties, neutral by default so `clear`, `lens` and `frosted` look as they did:
+  `saturation`, `rimGlow`, `shadow` and `hairlineFocus`.
+- `lerp(start, stop, fraction)` between two glasses.
+- New fields in the `GlassMaterial` data class change its constructor and `copy()` signatures: rebuild
+  against this version.
+- Demo: the lab opens on liquid glass with a finish slider, the room's light off; the gallery shows the
+  finish from 0 to 1 and compose-lumen's bar in glass (`--ei shot 5`, `6`).
+
 ## 1.1.1
 
 - JitPack builds the library again: use this version. 1.1.0 was tagged but never built, so it cannot be installed.

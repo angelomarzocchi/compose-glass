@@ -34,9 +34,15 @@ float2 boxNormal(float2 p, float2 b, float r) {
  * edge the bend is kept — split a little into its colours there, tinted the more glass there is to
  * look through, denser and a shade darker at the rim where it is thickest to look through ([edge]),
  * lit by the room — a highlight and a [hairline] on the side facing [keyLight] (and its far side, the
- * second value), a shade on the other, a whiter rim seen edge-on — and by two lights inside it: [lamp], under the finger, which the rim
+ * second value; the third, how much the line gathers where it faces the light), a shade on the other,
+ * a whiter rim seen edge-on — and by two lights inside it: [lamp], under the finger, which the rim
  * carries further than the body; and [sel], the plate of the selected tab, whose light the rim
  * catches near it.
+ *
+ * Liquid glass leaves the slab's shading out and keeps three things instead: the page seen through it
+ * a little richer in colour ([saturation]), an even light inside the rim ([rimGlow]) that shows its
+ * thickness without darkening it, and a soft shadow of its own under it ([shadow]: how dark, how far
+ * it spreads, how far down it falls), drawn round the shape in the room the layer has round it.
  *
  * On dark glass light adds up ([dark] 1); on pale glass it shows as colour instead ([dark] 0).
  */
@@ -53,7 +59,7 @@ uniform float4 tint;
 uniform float edge;
 uniform float rim;
 uniform float specular;
-uniform float2 hairline;
+uniform float3 hairline;
 uniform float lineWidth;
 uniform float3 keyLight;
 uniform float4 lamp;
@@ -62,6 +68,9 @@ uniform float4 sel;
 uniform float selOn;
 uniform float3 selColor;
 uniform float dark;
+uniform float saturation;
+uniform float rimGlow;
+uniform float3 shadow;
 $Box
 half4 main(float2 fc) {
     float2 q = fc - origin;
@@ -70,8 +79,14 @@ half4 main(float2 fc) {
     float r = min(radius, min(b.x, b.y));
     float2 p = q - c;
     float d = box(p, b, r);
+    // The glass's own shadow, the shape moved down and softened: it shows only where the glass does not.
+    float shade = 0.0;
+    if (shadow.x > 0.0 && d > -1.0) {
+        float ds = box(p - float2(0.0, shadow.z), b, r);
+        shade = shadow.x * (1.0 - smoothstep(-0.5 * shadow.y, shadow.y, ds));
+    }
     if (d > 1.0) {
-        return half4(0.0);
+        return half4(0.0, 0.0, 0.0, half(shade));
     }
     float2 g = boxNormal(p, b, r);
     float depth = max(-d, 0.0);
@@ -87,6 +102,10 @@ half4 main(float2 fc) {
         content.eval(fc + shift).g,
         content.eval(fc + shift * (1.0 - dispersion)).b
     );
+    // Richer colour through the glass, as liquid glass shows the page: the body's tint would otherwise
+    // wash it out towards grey.
+    float luma = dot(col, float3(0.2126, 0.7152, 0.0722));
+    col = clamp(mix(float3(luma), col, saturation), 0.0, 1.0);
     col = mix(col, tint.rgb, tint.a * (0.55 + 0.45 * h));
     // Seen through at the rim the slab is thickest: more of its body there, and a shade darker.
     col = mix(col, tint.rgb, edge * band * 0.45);
@@ -101,6 +120,11 @@ half4 main(float2 fc) {
     col = mix(col, float3(1.0), fresnel * rim * 0.32);
     float3 hv = normalize(l + float3(0.0, 0.0, 1.0));
     col += pow(max(dot(n, hv), 0.0), 80.0) * specular;
+    // An even light just inside the edge, the same all round but for a little more where the room's
+    // light meets it: the slab's thickness, with no side of it in shade.
+    float glowBand = exp(-depth / max(bevel * 0.35, 1.0));
+    float inner = clamp(rimGlow * glowBand * (0.6 + 0.4 * abs(facing)), 0.0, 1.0);
+    col = 1.0 - (1.0 - col) * (1.0 - inner);
     // The edge's line of light lies wholly inside the shape, [lineWidth] wide and fading inwards, averaged
     // over the pixel across the edge: on a curve it keeps its width instead of breaking into steps, and
     // the silhouette's own smoothing does not cut half of it away. It never goes out: where the edge is
@@ -113,7 +137,9 @@ half4 main(float2 fc) {
         line += t < 0.0 ? 0.0 : 1.0 - smoothstep(lw * 0.5, lw * 1.4, t);
     }
     line *= 0.25;
-    float sideOn = mix(hairline.y, hairline.x, facing * 0.5 + 0.5) * (0.3 + 0.7 * abs(facing));
+    // Gathered ([hairline].z above 1) the line glints where the edge faces the light and where it faces
+    // away, and runs faint between.
+    float sideOn = mix(hairline.y, hairline.x, facing * 0.5 + 0.5) * (0.3 + 0.7 * pow(abs(facing), max(hairline.z, 0.1)));
     // The line's share of the pixel, over the shape's share: the colour is weighted by the latter below.
     col += min(line / max(clamp(s + 0.5, 0.0, 1.0), 0.001), 1.0) * sideOn * 0.4;
 
@@ -140,7 +166,7 @@ half4 main(float2 fc) {
     col = mix(dyed, added, dark);
 
     float a = clamp(0.5 - d, 0.0, 1.0);
-    return half4(half3(col * a), half(a));
+    return half4(half3(col * a), half(a + shade * (1.0 - a)));
 }
 """
 

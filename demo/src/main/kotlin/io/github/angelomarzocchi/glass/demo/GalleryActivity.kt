@@ -48,14 +48,18 @@ import io.github.angelomarzocchi.glass.GlassBackdrop
 import io.github.angelomarzocchi.glass.GlassMaterial
 import io.github.angelomarzocchi.glass.GlassSurface
 import io.github.angelomarzocchi.glass.rememberGlassBackdrop
+import io.github.angelomarzocchi.lumen.FloatingNavBar
+import io.github.angelomarzocchi.lumen.FloatingNavItem
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 
 /**
  * Still frames of glass for the README, one per launch: `--ei shot N`.
  *
- * - 0: the spectrum, light — the same slabs over the same page, from liquid glass to milk.
+ * - 0: the spectrum, light — the same glass over the same page, its finish from liquid to matte.
  * - 1: the spectrum, dark.
  * - 2: light inside the glass, from none to full (dark, where light adds up).
  * - 3: the pieces in context — island, tab bar, FAB, panel — dark; 4: the same, light.
+ * - 5: compose-lumen's navigation bar in liquid glass, a finger held on a tab, light; 6: the same, dark.
  *
  * `adb shell am start -n io.github.angelomarzocchi.glass.demo/.GalleryActivity --ei shot 0`
  */
@@ -64,7 +68,7 @@ class GalleryActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val shot = intent.getIntExtra("shot", 0)
-        val dark = shot != 0 && shot != 4
+        val dark = shot in setOf(1, 2, 3, 6)
         setContent {
             MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
                 Gallery(shot, dark)
@@ -72,24 +76,6 @@ class GalleryActivity : ComponentActivity() {
         }
     }
 }
-
-/** The far end of the spectrum: a lens with a wide rim that bends, splits and mirrors everything. */
-private fun liquid(dark: Boolean) = GlassMaterial.lens(dark).copy(
-    bevel = 24.dp,
-    refraction = 30.dp,
-    falloff = 1.6f,
-    dispersion = 0.14f,
-    frost = 0.dp,
-    tintAmount = if (dark) 0.12f else 0.06f,
-    edge = 0f,
-    rim = if (dark) 0.8f else 1f,
-    specular = 0.9f,
-    inkDepth = 0.6f,
-    inkReflection = 0.3f,
-)
-
-/** The other end: thick milky glass that hides what is under it. */
-private fun milk(dark: Boolean) = GlassMaterial.frosted(dark).copy(frost = 26.dp, tintAmount = if (dark) 0.84f else 0.8f)
 
 @Composable
 private fun Gallery(shot: Int, dark: Boolean) {
@@ -106,6 +92,7 @@ private fun Gallery(shot: Int, dark: Boolean) {
             when (shot) {
                 0, 1 -> Spectrum(backdrop, dark)
                 2 -> Lights(backdrop, dark)
+                5, 6 -> LumenBar(backdrop, dark)
                 else -> InContext(backdrop, dark)
             }
         }
@@ -124,29 +111,51 @@ private fun Gallery(shot: Int, dark: Boolean) {
 }
 
 private val Titles = listOf(
-    "From liquid to frosted" to "The same slab, five materials",
-    "From liquid to frosted" to "The same slab, five materials · dark",
+    "From liquid to matte" to "One glass, its finish from 0 to 1",
+    "From liquid to matte" to "One glass, its finish from 0 to 1 · dark",
     "Light inside the glass" to "From none to full · dark glass",
     "Glass, in place" to "Island, tab bar, FAB, panel",
     "Glass, in place" to "Island, tab bar, FAB, panel · light",
+    "Lumen in glass" to "FloatingNavBar, a finger on Saved · light",
+    "Lumen in glass" to "FloatingNavBar, a finger on Saved · dark",
 )
+
+/** compose-lumen's bar with its island in liquid glass, a finger held on the third tab. */
+@Composable
+private fun ColumnScope.LumenBar(backdrop: GlassBackdrop, dark: Boolean) {
+    Spacer(Modifier.weight(1f))
+    val items = listOf(
+        FloatingNavItem("Home", rememberVectorPainter(Icons.Default.Home)),
+        FloatingNavItem("Search", rememberVectorPainter(Icons.Default.Search)),
+        FloatingNavItem("Saved", rememberVectorPainter(Icons.Default.Favorite)),
+        FloatingNavItem("You", rememberVectorPainter(Icons.Default.Person)),
+    )
+    FloatingNavBar(
+        items = items,
+        selectedIndex = 0,
+        onSelect = {},
+        heldAt = 2,
+        haptics = false,
+        material = rememberGlassIsland(backdrop, GlassMaterial.liquid(dark, finish = 0.3f)),
+    )
+}
 
 @Composable
 private fun Spectrum(backdrop: GlassBackdrop, dark: Boolean) {
     listOf(
-        Triple("Liquid", "wide rim · strong bend · dispersion", liquid(dark)),
-        Triple("Lens", "GlassMaterial.lens()", GlassMaterial.lens(dark)),
-        Triple("Clear", "GlassMaterial.clear()", GlassMaterial.clear(dark)),
-        Triple("Frosted", "GlassMaterial.frosted()", GlassMaterial.frosted(dark)),
-        Triple("Milk", "heavy frost and body", milk(dark)),
-    ).forEach { (name, detail, material) ->
-        Slab(backdrop, material, dark, name, detail)
+        Triple("Liquid", "GlassMaterial.liquid()", 0f),
+        Triple("A touch of frost", "liquid(finish = 0.25)", 0.25f),
+        Triple("Half way", "liquid(finish = 0.5)", 0.5f),
+        Triple("Satin", "liquid(finish = 0.75)", 0.75f),
+        Triple("Matte", "GlassMaterial.matte()", 1f),
+    ).forEach { (name, detail, finish) ->
+        Slab(backdrop, GlassMaterial.liquid(dark, finish), dark, name, detail)
     }
 }
 
 @Composable
 private fun Lights(backdrop: GlassBackdrop, dark: Boolean) {
-    val material = GlassMaterial.clear(dark)
+    val material = GlassMaterial.liquid(dark, finish = 0.3f)
     val accent = Color(0xFF7C5CFF)
     val warm = Color(0xFFFF8A3D)
     val px = with(LocalDensity.current) { 1.dp.toPx() }
@@ -191,10 +200,10 @@ private fun Lights(backdrop: GlassBackdrop, dark: Boolean) {
 @Composable
 private fun ColumnScope.InContext(backdrop: GlassBackdrop, dark: Boolean) {
     val accent = Color(0xFF7C5CFF)
-    val clear = GlassMaterial.clear(dark)
+    val bar = GlassMaterial.liquid(dark, finish = 0.3f)
     val ink = if (dark) Color.White else Color(0xFF1C1B20)
     // The island at the top.
-    GlassSurface(backdrop, clear, Modifier.height(56.dp), dark = dark, lampInk = accent) {
+    GlassSurface(backdrop, bar, Modifier.height(56.dp), dark = dark, lampInk = if (dark) Color.White else accent) {
         Row(Modifier.fillMaxHeight().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(38.dp).background(accent, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
                 Text("G", color = Color.White, fontWeight = FontWeight.Bold)
@@ -211,14 +220,14 @@ private fun ColumnScope.InContext(backdrop: GlassBackdrop, dark: Boolean) {
     // A frosted panel.
     GlassSurface(
         backdrop,
-        GlassMaterial.frosted(dark),
+        GlassMaterial.liquid(dark, finish = 0.8f),
         Modifier.fillMaxWidth().height(200.dp),
         cornerRadius = 28.dp,
         dark = dark,
-        lampInk = accent,
+        lampInk = if (dark) Color.White else accent,
     ) {
         Column(Modifier.padding(22.dp)) {
-            Text("Frosted panel", color = ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+            Text("Matte panel", color = ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
             Text(
                 "Enough body and frost that text reads over the busiest page, and a rim that still catches the light.",
@@ -230,7 +239,7 @@ private fun ColumnScope.InContext(backdrop: GlassBackdrop, dark: Boolean) {
     Spacer(Modifier.weight(1f))
     // The FAB, half full of light.
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-        GlassSurface(backdrop, clear, Modifier.size(66.dp), dark = dark, lighting = { size ->
+        GlassSurface(backdrop, bar, Modifier.size(66.dp), dark = dark, lighting = { size ->
             val inset = size.minDimension * 0.14f
             selection = Rect(inset, inset, size.width - inset, size.height - inset)
             selectionOn = 0.6f
@@ -245,10 +254,10 @@ private fun ColumnScope.InContext(backdrop: GlassBackdrop, dark: Boolean) {
     val px = with(LocalDensity.current) { 6.dp.toPx() }
     GlassSurface(
         backdrop,
-        clear,
+        bar,
         Modifier.fillMaxWidth().height(70.dp),
         dark = dark,
-        lampInk = accent,
+        lampInk = if (dark) Color.White else accent,
         lighting = { size ->
             val cell = size.width / tabs.size
             selection = Rect(px, px, cell - px, size.height - px)
@@ -289,7 +298,8 @@ private fun Slab(
         material = material,
         modifier = Modifier.fillMaxWidth().height(86.dp),
         dark = dark,
-        lampInk = Color(0xFF7C5CFF),
+        // The accent on pale glass; on dark glass the default, white, which reads in the lamp's light.
+        lampInk = if (dark) Color.Unspecified else Color(0xFF7C5CFF),
         lighting = lighting,
     ) {
         Column(Modifier.align(Alignment.CenterStart).padding(start = 30.dp)) {

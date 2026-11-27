@@ -1,6 +1,7 @@
 package io.github.angelomarzocchi.glass
 
 import androidx.compose.ui.unit.dp
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -63,8 +64,67 @@ class GlassMaterialTest {
 
     @Test
     fun everyLengthIsPositive() {
-        listOf(GlassMaterial.clear(false), GlassMaterial.lens(true), GlassMaterial.frosted(false), GlassMaterial.liquid(true)).forEach {
+        listOf(
+            GlassMaterial.clear(false), GlassMaterial.lens(true), GlassMaterial.frosted(false), GlassMaterial.liquid(true),
+            GlassMaterial.liquid(false, finish = 0.5f), GlassMaterial.matte(true),
+        ).forEach {
             assertTrue(it.bevel > 0.dp && it.lampReach > 0.dp && it.inkGlow >= 0.dp && it.frost >= 0.dp)
+        }
+    }
+
+    @Test
+    fun liquidGlassHasNoSlabShading() {
+        for (dark in listOf(false, true)) {
+            for (finish in listOf(0f, 0.5f, 1f)) {
+                val glass = GlassMaterial.liquid(dark, finish)
+                // No darker band, no light-and-shade across the rim, no highlight over it: that is the acrylic look.
+                assertEquals(0f, glass.edge)
+                assertEquals(0f, glass.rim)
+                assertEquals(0f, glass.specular)
+                assertTrue(glass.saturation > 1f && glass.hairline > 0f && glass.shadow > 0f)
+            }
+        }
+    }
+
+    @Test
+    fun theFinishFrostsTheGlassAndSettlesItsBend() {
+        for (dark in listOf(false, true)) {
+            val steps = listOf(0f, 0.25f, 0.5f, 0.75f, 1f).map { GlassMaterial.liquid(dark, it) }
+            steps.zipWithNext().forEach { (a, b) ->
+                assertTrue(b.frost > a.frost)
+                assertTrue(b.tintAmount > a.tintAmount)
+                assertTrue(b.refraction < a.refraction)
+                assertTrue(b.saturation < a.saturation)
+            }
+            assertEquals(0.dp, steps.first().frost)
+            assertEquals(GlassMaterial.matte(dark), steps.last())
+            // Out of range is the nearest end, not an extrapolation.
+            assertEquals(steps.first(), GlassMaterial.liquid(dark, -1f))
+            assertEquals(steps.last(), GlassMaterial.liquid(dark, 2f))
+        }
+    }
+
+    @Test
+    fun lerpReachesBothEndsAndEveryPropertyBetween() {
+        val a = GlassMaterial.clear(dark = false)
+        val b = GlassMaterial.matte(dark = true)
+        assertEquals(a, lerp(a, b, 0f))
+        assertEquals(b, lerp(a, b, 1f))
+        val half = lerp(a, b, 0.5f)
+        assertEquals((a.bevel.value + b.bevel.value) / 2f, half.bevel.value, 1e-4f)
+        assertEquals((a.saturation + b.saturation) / 2f, half.saturation, 1e-4f)
+        assertEquals((a.shadow + b.shadow) / 2f, half.shadow, 1e-4f)
+        assertEquals((a.hairlineFocus + b.hairlineFocus) / 2f, half.hairlineFocus, 1e-4f)
+    }
+
+    @Test
+    fun theAcrylicPresetsLookAsTheyDid() {
+        // The new properties are neutral unless a preset asks for them.
+        for (glass in listOf(GlassMaterial.clear(false), GlassMaterial.lens(true), GlassMaterial.frosted(false))) {
+            assertEquals(1f, glass.saturation)
+            assertEquals(0f, glass.rimGlow)
+            assertEquals(0f, glass.shadow)
+            assertEquals(1f, glass.hairlineFocus)
         }
     }
 }

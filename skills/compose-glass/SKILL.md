@@ -21,7 +21,7 @@ Glass refracts a **recording of the page under it**. So:
 ```kotlin
 Box(Modifier.fillMaxSize()) {
     Page(Modifier.fillMaxSize().glassBackdrop(backdrop).background(surface))   // recorded
-    GlassSurface(backdrop, GlassMaterial.clear(dark), Modifier.align(Alignment.BottomCenter)) { … }
+    GlassSurface(backdrop, GlassMaterial.liquid(dark, finish = 0.3f), Modifier.align(Alignment.BottomCenter)) { … }
 }
 ```
 
@@ -34,19 +34,38 @@ otherwise the glass sees transparency.
 val lamp = rememberGlassLamp()
 GlassSurface(
     backdrop = backdrop,
-    material = GlassMaterial.clear(dark),   // or liquid(dark), lens(dark), frosted(dark), or .copy(...)
+    material = GlassMaterial.liquid(dark, finish = 0.3f),   // see "Choosing the glass"
     modifier = Modifier.size(280.dp, 64.dp).glassLampFollowsFinger(lamp),
     cornerRadius = null,                    // null = capsule; or e.g. 28.dp
     lamp = lamp,                            // the finger's light; same instance as in the modifier
     dark = dark,                            // dark glass adds light; pale glass shows it as colour
     lampInk = accent,                       // what engraved content turns under the lamp on pale glass
-    lighting = { size -> keyLight = roomLight() },
+    lighting = { size -> /* a selection, say; keyLight only if asked for */ },
 ) { content() }                             // engraved: bends at the rim, lights up under lights
 ```
 
 - `glassLampFollowsFinger` does **not** consume touches: buttons inside still get clicks.
 - Pass `dark` explicitly when the theme can differ from the system setting (it defaults to
-  `isSystemInDarkTheme()`), and pick the material with the same flag: `GlassMaterial.clear(dark)`.
+  `isSystemInDarkTheme()`), and pick the material with the same flag: `GlassMaterial.liquid(dark, …)`.
+
+## Choosing the glass
+
+Default to **`GlassMaterial.liquid(dark, finish)`**: liquid glass, iOS-style. One knob, `finish`, 0 to 1:
+
+| The user asks for | Use |
+|---|---|
+| liquid glass, "like iOS", clear, see-through | `liquid(dark)` (finish 0) |
+| a bar, a FAB, an island over a busy page (labels must read) | `liquid(dark, finish = 0.3f)` |
+| frosted, satin | `liquid(dark, finish = 0.5f)` to `0.75f` |
+| matte, a panel or a sheet with text | `matte(dark)` (finish 1) |
+| glass that changes (frosts on scroll, morphs) | `lerp(a, b, fraction)` read in draw |
+| a bevelled slab, acrylic, "3D button" (only if asked) | `clear(dark)`, `lens(dark)`, `frosted(dark)` |
+
+- Do **not** add `rememberTiltKeyLight()` unless the user asks for the light to follow the phone. On
+  liquid glass it only moves the edge's glints, and it keeps the glass redrawing while the phone is in hand.
+- Do not turn the acrylic shading (`edge`, `rim`, `specular`) up on liquid glass: that brings back the
+  bevel. Tune `saturation`, `hairline`, `rimGlow`, `shadow` with `copy()` instead.
+- `inkReflection` mirrors labels into the rim: leave it at 0 unless asked, it reads as a glitch.
 
 ## The lighting block
 
@@ -56,7 +75,7 @@ objects or launch coroutines in it. Fields (reset to defaults before each call):
 
 | Field | Meaning |
 |---|---|
-| `keyLight: Offset` | Direction of the room's light (x right, y down). `DefaultKeyLight` = up-left. Use `rememberTiltKeyLight()` to follow the phone. |
+| `keyLight: Offset` | Direction of the room's light (x right, y down). `DefaultKeyLight` = up-left. `rememberTiltKeyLight()` follows the phone (only when asked for). |
 | `lamp`, `lampOn`, `lampColor` | The finger's light (filled from `lamp` for you). |
 | `lampInk` | Colour engraved content turns under the lamp. |
 | `selection: Rect`, `selectionOn`, `selectionColor` | A light left on inside, capsule-shaped, e.g. the selected tab. Animate `selection` between tabs, or `selectionOn` 0→1 for a fill. |

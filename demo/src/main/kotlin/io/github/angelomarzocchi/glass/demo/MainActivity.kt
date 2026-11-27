@@ -94,7 +94,8 @@ import kotlinx.coroutines.launch
  * What to try. Scroll: the page bends at every rim and splits into its colours there. Put a finger on
  * the bar and slide it: the lamp's light spreads through the glass and runs out to the rim, and the
  * engraved icons light up as it passes; tap a tab and the selection — a light left on inside — flows
- * there. Hold the +: it fills with light. Tilt the phone: the room's light moves round every rim.
+ * there. Hold the +: it fills with light. Slide the finish from liquid to matte. With the room's light
+ * following the phone (off by default, in the panel), tilt it: the glints move round every rim.
  *
  * Full glass needs Android 13 (API 33) or later. Below that it is frosted or tinted, and the page says so.
  */
@@ -107,12 +108,15 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Preset(val label: String) {
-    Clear("Clear"),
+    Liquid("Liquid"),
+    Clear("Acrylic"),
     Lens("Lens"),
     Frosted("Frosted"),
     ;
 
-    fun material(dark: Boolean) = when (this) {
+    /** Liquid glass takes its [finish]; the acrylic presets have none. */
+    fun material(dark: Boolean, finish: Float) = when (this) {
+        Liquid -> GlassMaterial.liquid(dark, finish)
         Clear -> GlassMaterial.clear(dark)
         Lens -> GlassMaterial.lens(dark)
         Frosted -> GlassMaterial.frosted(dark)
@@ -123,7 +127,8 @@ private enum class Preset(val label: String) {
 @Stable
 private class LabState(dark: Boolean) {
     var dark by mutableStateOf(dark)
-    var preset by mutableStateOf(Preset.Clear)
+    var preset by mutableStateOf(Preset.Liquid)
+    var finish by mutableFloatStateOf(0.3f)
     var bevel by mutableFloatStateOf(0f)
     var refraction by mutableFloatStateOf(0f)
     var dispersion by mutableFloatStateOf(0f)
@@ -135,7 +140,14 @@ private class LabState(dark: Boolean) {
     var inkDepth by mutableFloatStateOf(0f)
     var inkReflection by mutableFloatStateOf(0f)
     var lampReach by mutableFloatStateOf(0f)
-    var tilt by mutableStateOf(true)
+    var hairline by mutableFloatStateOf(0f)
+    var hairlineFocus by mutableFloatStateOf(0f)
+    var saturation by mutableFloatStateOf(0f)
+    var rimGlow by mutableFloatStateOf(0f)
+    var shadow by mutableFloatStateOf(0f)
+
+    // Off unless asked for: liquid glass is still glass with the phone still.
+    var tilt by mutableStateOf(false)
     var panelOpen by mutableStateOf(false)
 
     init {
@@ -143,7 +155,7 @@ private class LabState(dark: Boolean) {
     }
 
     fun reset() {
-        val m = preset.material(dark)
+        val m = preset.material(dark, finish)
         bevel = m.bevel.value
         refraction = m.refraction.value
         dispersion = m.dispersion
@@ -155,9 +167,14 @@ private class LabState(dark: Boolean) {
         inkDepth = m.inkDepth
         inkReflection = m.inkReflection
         lampReach = m.lampReach.value
+        hairline = m.hairline
+        hairlineFocus = m.hairlineFocus
+        saturation = m.saturation
+        rimGlow = m.rimGlow
+        shadow = m.shadow
     }
 
-    fun material(): GlassMaterial = preset.material(dark).copy(
+    fun material(): GlassMaterial = preset.material(dark, finish).copy(
         bevel = bevel.dp,
         refraction = refraction.dp,
         dispersion = dispersion,
@@ -169,6 +186,11 @@ private class LabState(dark: Boolean) {
         inkDepth = inkDepth,
         inkReflection = inkReflection,
         lampReach = lampReach.dp,
+        hairline = hairline,
+        hairlineFocus = hairlineFocus,
+        saturation = saturation,
+        rimGlow = rimGlow,
+        shadow = shadow,
     )
 }
 
@@ -444,11 +466,12 @@ private fun Panel(state: LabState, backdrop: GlassBackdrop, roomLight: () -> Off
     val colors = MaterialTheme.colorScheme
     val lamp = rememberGlassLamp()
     val clear = state.material()
-    // Frosted, for all it holds to read; its rim a little wider, as a bigger slab's is.
+    // Matte, for all it holds to read, whatever the glass under test.
     val material = clear.copy(
-        frost = maxOf(clear.frost, 14.dp),
-        tintAmount = maxOf(clear.tintAmount, 0.5f),
-        bevel = clear.bevel + 4.dp,
+        frost = maxOf(clear.frost, 18.dp),
+        tintAmount = maxOf(clear.tintAmount, 0.55f),
+        refraction = minOf(clear.refraction, 4.dp),
+        dispersion = 0f,
     )
     GlassSurface(
         backdrop = backdrop,
@@ -485,6 +508,12 @@ private fun Panel(state: LabState, backdrop: GlassBackdrop, roomLight: () -> Off
                     )
                 }
             }
+            if (state.preset == Preset.Liquid) {
+                LabSlider("Finish: liquid to matte", state.finish, 0f..1f, percent(state.finish)) {
+                    state.finish = it
+                    state.reset()
+                }
+            }
             LabSwitch("Dark", state.dark) {
                 state.dark = it
                 state.reset()
@@ -495,11 +524,16 @@ private fun Panel(state: LabState, backdrop: GlassBackdrop, roomLight: () -> Off
             LabSlider("Dispersion", state.dispersion, 0f..0.3f, percent(state.dispersion)) { state.dispersion = it }
             LabSlider("Frost", state.frost, 0f..24f, "${state.frost.toInt()} dp") { state.frost = it }
             LabSlider("Body", state.tintAmount, 0f..0.9f, percent(state.tintAmount)) { state.tintAmount = it }
-            LabSlider("Rim thickness", state.edge, 0f..1f, percent(state.edge)) { state.edge = it }
-            LabSlider("Light on the rim", state.rim, 0f..1.5f, percent(state.rim)) { state.rim = it }
-            LabSlider("Highlight", state.specular, 0f..1.5f, percent(state.specular)) { state.specular = it }
+            LabSlider("Rim thickness (acrylic)", state.edge, 0f..1f, percent(state.edge)) { state.edge = it }
+            LabSlider("Light and shade on the rim (acrylic)", state.rim, 0f..1.5f, percent(state.rim)) { state.rim = it }
+            LabSlider("Highlight across the rim (acrylic)", state.specular, 0f..1.5f, percent(state.specular)) { state.specular = it }
             LabSlider("Engraving depth", state.inkDepth, 0f..1f, percent(state.inkDepth)) { state.inkDepth = it }
             LabSlider("Rim mirror", state.inkReflection, 0f..1f, percent(state.inkReflection)) { state.inkReflection = it }
+            LabSlider("Colour through the glass", state.saturation, 0.5f..2f, percent(state.saturation)) { state.saturation = it }
+            LabSlider("Line of light on the edge", state.hairline, 0f..1.5f, percent(state.hairline)) { state.hairline = it }
+            LabSlider("Glint (line gathered)", state.hairlineFocus, 0.5f..5f, "%.1f".format(state.hairlineFocus)) { state.hairlineFocus = it }
+            LabSlider("Glow inside the rim", state.rimGlow, 0f..0.6f, percent(state.rimGlow)) { state.rimGlow = it }
+            LabSlider("Shadow", state.shadow, 0f..0.6f, percent(state.shadow)) { state.shadow = it }
             LabSlider("Finger light reach", state.lampReach, 12f..90f, "${state.lampReach.toInt()} dp") { state.lampReach = it }
         }
     }
@@ -562,9 +596,9 @@ private fun LabPage(shaderError: String?) {
         Chips()
         GradientCard("Deep sea", listOf(Color(0xFF0B3D91), Color(0xFF1E88E5), Color(0xFF26C6DA)))
         Text(
-            "Not a blur and not a lens: a slab with a thin rim. What is under it bends only where the rim " +
-                "falls away; the depth shows because the glass is denser there, and the room's light catches it " +
-                "on one side. Icons and words are engraved in the slab, and the finger's light runs through it.",
+            "Liquid glass: the page bends where the rim falls away and shows through a little richer in colour; " +
+                "a fine line of light runs round the edge. Slide its finish towards matte and it frosts, for " +
+                "words to read on. Icons and words are engraved in it, and the finger's light runs through it.",
             style = MaterialTheme.typography.bodyLarge,
             color = colors.onSurface,
         )

@@ -27,6 +27,7 @@ android {
 
 dependencies {
     implementation(project(":glass"))
+    implementation(libs.lumen)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
